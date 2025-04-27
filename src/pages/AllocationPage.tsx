@@ -593,15 +593,24 @@ const AllocationPage: React.FC = () => {
               <div className="mt-2 p-3 bg-gray-50 rounded-lg">
                 <div className="space-y-4 mt-1">
                   {accounts.map(account => {
+                    const outgoings = getOutgoingsForAccount(account.id);
+                    const totalOutgoings = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
                     const currentAllocation = getAllocationForAccount(account.id);
-                    const manualAmount = manualAllocations[account.id] || 0;
-                    const totalForAccount = currentAllocation + manualAmount;
+                    const manualAllocation = manualAllocations[account.id] || 0;
+                    const totalForAccount = currentAllocation + manualAllocation;
+                    const fundingPercentage = totalOutgoings > 0 
+                      ? (currentAllocation / totalOutgoings) * 100
+                      : 0;
+                    const totalFundingPercentage = totalOutgoings > 0
+                      ? (totalForAccount / totalOutgoings) * 100
+                      : 0;
+                    
                     return (
                       <div key={`manual-${account.id}`} className="space-y-1">
                         <div className="flex justify-between items-center">
                           <p className="text-sm font-medium" style={{ color: account.color }}>{account.name}</p>
                           <div className="text-right">
-                            <p className="text-sm font-semibold">{formatCurrency(manualAmount)}</p>
+                            <p className="text-sm font-semibold">{formatCurrency(manualAllocation)}</p>
                             <p className="text-xs text-gray-500">Total: {formatCurrency(totalForAccount)}</p>
                           </div>
                         </div>
@@ -611,16 +620,16 @@ const AllocationPage: React.FC = () => {
                             min="0"
                             max={unallocatedFunds}
                             step="1"
-                            value={manualAmount}
+                            value={manualAllocation}
                             onChange={(e) => handleManualAllocationChange(account.id, parseInt(e.target.value, 10))}
                             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                             style={{
-                              background: `linear-gradient(to right, ${account.color} 0%, ${account.color} ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb 100%)`,
+                              background: `linear-gradient(to right, ${account.color} 0%, ${account.color} ${(manualAllocation/unallocatedFunds)*100}%, #e5e7eb ${(manualAllocation/unallocatedFunds)*100}%, #e5e7eb 100%)`,
                               accentColor: account.color
                             }}
                           />
                           <button
-                            onClick={() => handleManualAllocationChange(account.id, getRemainingUnallocated() + manualAmount)}
+                            onClick={() => handleManualAllocationChange(account.id, getRemainingUnallocated() + manualAllocation)}
                             className="text-xs text-indigo-600 hover:text-indigo-800"
                           >
                             Max
@@ -680,21 +689,96 @@ const AllocationPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
-                <div 
-                  className="h-full transition-all duration-500 ease-out rounded-full"
-                  style={{ 
-                    width: `${Math.min(fundingPercentage, 100)}%`,
-                    backgroundColor: account.color
-                  }}
-                />
-                {manualAllocation > 0 && (
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2 relative">
+                {/* For automatic funding */}
+                {!manualAllocation && fundingPercentage <= 100 && (
                   <div 
-                    className="h-full transition-all duration-500 ease-out rounded-full mt-[-8px]"
+                    className="h-full absolute top-0 left-0 rounded-full"
                     style={{ 
-                      width: `${Math.min(totalFundingPercentage, 100)}%`,
-                      backgroundColor: account.color,
-                      opacity: 0.5
+                      width: `${fundingPercentage}%`,
+                      backgroundColor: account.color
+                    }}
+                  />
+                )}
+
+                {/* For automatic overfunding */}
+                {!manualAllocation && fundingPercentage > 100 && (
+                  <>
+                    {/* Base 100% */}
+                    <div 
+                      className="h-full absolute top-0 left-0"
+                      style={{ 
+                        width: `${100 * (100/fundingPercentage)}%`,
+                        backgroundColor: account.color
+                      }}
+                    />
+                    
+                    {/* Overfunding area with lighter color */}
+                    <div 
+                      className="h-full absolute top-0 right-0 overflow-hidden"
+                      style={{ 
+                        width: `${100 - (100 * (100/fundingPercentage))}%`,
+                        backgroundColor: account.color,
+                        opacity: 0.6
+                      }}
+                    />
+                  </>
+                )}
+
+                {/* For manual allocation without overfunding */}
+                {manualAllocation > 0 && totalFundingPercentage <= 100 && (
+                  <>
+                    {/* Show base funding */}
+                    <div 
+                      className="h-full absolute top-0 left-0"
+                      style={{ 
+                        width: `${fundingPercentage}%`,
+                        backgroundColor: account.color
+                      }}
+                    />
+                    
+                    {/* Show manual funding */}
+                    <div 
+                      className="h-full absolute top-0 left-0"
+                      style={{ 
+                        width: `${totalFundingPercentage}%`,
+                        backgroundColor: account.color,
+                        opacity: 0.4
+                      }}
+                    />
+                  </>
+                )}
+
+                {/* For manual allocation with overfunding */}
+                {manualAllocation > 0 && totalFundingPercentage > 100 && (
+                  <>
+                    {/* Base funding up to 100% */}
+                    <div 
+                      className="h-full absolute top-0 left-0"
+                      style={{ 
+                        width: `${100 * (100/totalFundingPercentage)}%`,
+                        backgroundColor: account.color
+                      }}
+                    />
+                    
+                    {/* Overfunding area with lighter color */}
+                    <div 
+                      className="h-full absolute top-0 right-0 overflow-hidden"
+                      style={{ 
+                        width: `${100 - (100 * (100/totalFundingPercentage))}%`,
+                        backgroundColor: account.color,
+                        opacity: 0.3
+                      }}
+                    />
+                  </>
+                )}
+
+                {/* 100% funding marker line */}
+                {totalFundingPercentage > 100 && (
+                  <div 
+                    className="absolute top-0 h-full w-0.5 bg-white"
+                    style={{ 
+                      left: `${100 * (100/totalFundingPercentage)}%`
                     }}
                   />
                 )}
