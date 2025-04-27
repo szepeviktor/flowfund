@@ -1,7 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
-  LayoutDashboard, 
   PiggyBank, 
   CreditCard,
   ArrowDownUp
@@ -18,10 +17,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
   const { totalFunds, totalRequired, remainingToAllocate, totalAllocated } = useAppContext();
   
   const navLinks = [
-    { to: '/', icon: <LayoutDashboard size={20} />, text: 'Dashboard' },
+    { to: '/', icon: <ArrowDownUp size={20} />, text: 'Allocate' },
     { to: '/accounts', icon: <PiggyBank size={20} />, text: 'Accounts' },
     { to: '/outgoings', icon: <CreditCard size={20} />, text: 'Outgoings' },
-    { to: '/allocate', icon: <ArrowDownUp size={20} />, text: 'Allocate' },
   ];
   
   const sidebarClasses = isOpen 

@@ -14,7 +14,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar, isSidebarOpen }) => {
   const getPageTitle = () => {
     switch (location.pathname) {
       case '/':
-        return 'Dashboard';
+        return 'Allocate Funds';
       case '/accounts':
         return 'Accounts';
       case '/outgoings':
