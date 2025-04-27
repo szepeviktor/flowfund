@@ -551,9 +551,6 @@ const AllocationPage: React.FC = () => {
                 </p>
                 <p className={`text-lg font-semibold ${remainingAfterManualAllocations < 0 ? 'text-red-600' : remainingAfterManualAllocations > 0 ? 'text-emerald-600' : ''}`}>
                   {formatCurrency(remainingAfterManualAllocations)}
-                  <span className="text-sm ml-1">
-                    {remainingAfterManualAllocations < 0 ? '(shortage)' : remainingAfterManualAllocations > 0 ? '(surplus)' : ''}
-                  </span>
                 </p>
               </div>
               {unallocatedFunds > 0 && (
