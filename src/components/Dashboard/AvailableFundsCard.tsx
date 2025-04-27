@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
+import { useAllocation } from '../../hooks/useAllocation';
 import { formatCurrency } from '../../utils/formatters';
 import Card from '../UI/Card';
 import { Wallet } from 'lucide-react';
 
 const AvailableFundsCard: React.FC = () => {
-  const { availableFunds, updateAvailableFunds } = useAppContext();
+  const { availableFunds } = useAppContext();
+  const { updateFundsAndAllocations } = useAllocation();
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState(availableFunds.toString());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -24,7 +26,8 @@ const AvailableFundsCard: React.FC = () => {
   const handleBlur = () => {
     const newAmount = parseFloat(amount);
     if (!isNaN(newAmount) && newAmount >= 0) {
-      updateAvailableFunds(newAmount);
+      // Use the shared hook to update both funds and allocations
+      updateFundsAndAllocations(newAmount);
     } else {
       setAmount(availableFunds.toString());
     }

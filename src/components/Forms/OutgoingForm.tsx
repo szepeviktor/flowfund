@@ -21,7 +21,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
   
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
-    amount: initialData?.amount || 0,
+    amount: initialData ? initialData.amount : '',
     dueDate: initialData?.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
     recurrence: initialData?.recurrence || 'monthly' as RecurrenceType,
     accountId: initialData?.accountId || accounts[0]?.id || '',
@@ -31,17 +31,20 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    const submissionData = {
+      ...formData,
+      // Convert amount to number during submission
+      amount: typeof formData.amount === 'string' ? parseFloat(formData.amount) || 0 : formData.amount,
+      dueDate: new Date(formData.dueDate).toISOString(),
+    };
+    
     if (initialData) {
       updateOutgoing({
         ...initialData,
-        ...formData,
-        dueDate: new Date(formData.dueDate).toISOString(),
+        ...submissionData,
       });
     } else {
-      addOutgoing({
-        ...formData,
-        dueDate: new Date(formData.dueDate).toISOString(),
-      });
+      addOutgoing(submissionData);
     }
     
     onClose();
@@ -73,10 +76,11 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
             type="number"
             id="amount"
             value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
+            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
             className="block w-full pl-8 pr-4 py-2 rounded-md border border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
             min="0"
             step="0.01"
+            placeholder="0.00"
             required
           />
         </div>

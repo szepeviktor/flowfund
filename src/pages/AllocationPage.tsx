@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { useAllocation } from '../hooks/useAllocation';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { formatCurrency } from '../utils/formatters';
@@ -9,47 +10,31 @@ const AllocationPage: React.FC = () => {
   const { 
     accounts, 
     getOutgoingsForAccount,
-    updateAllocations,
     getAllocationForAccount,
+    availableFunds
   } = useAppContext();
-
+  
+  const { updateFundsAndAllocations } = useAllocation();
   const [availableFundsInput, setAvailableFundsInput] = useState<string>('');
 
+  // Initialize input with current availableFunds when component mounts
+  useEffect(() => {
+    if (availableFunds > 0) {
+      setAvailableFundsInput(availableFunds.toString());
+    }
+  }, [availableFunds]);
+
   const handleReset = () => {
-    updateAllocations([]);
+    updateFundsAndAllocations(0);
     setAvailableFundsInput('');
   };
 
   const handleFundsChange = (value: string) => {
     setAvailableFundsInput(value);
     const total = parseFloat(value) || 0;
-
-    if (total <= 0) {
-      updateAllocations([]);
-      return;
-    }
-
-    let remainingFunds = total;
-    const newAllocations = [];
-
-    // Simple sequential allocation
-    for (const account of accounts) {
-      const outgoings = getOutgoingsForAccount(account.id);
-      const needed = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
-      
-      if (needed > 0 && remainingFunds > 0) {
-        // Allocate either what's needed or what's left, whichever is smaller
-        const allocation = Math.min(needed, remainingFunds);
-        newAllocations.push({
-          id: crypto.randomUUID(),
-          accountId: account.id,
-          amount: allocation
-        });
-        remainingFunds -= allocation;
-      }
-    }
-
-    updateAllocations(newAllocations);
+    
+    // Use the shared hook to update both funds and allocations
+    updateFundsAndAllocations(total);
   };
 
   const totalNeeded = accounts.reduce((sum, account) => {
