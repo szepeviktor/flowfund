@@ -4,7 +4,7 @@ import { useAllocation } from '../hooks/useAllocation';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { formatCurrency } from '../utils/formatters';
-import { RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, RefreshCcw } from 'lucide-react';
 import { FundSource } from '../types';
 
 const AllocationPage: React.FC = () => {
@@ -20,7 +20,6 @@ const AllocationPage: React.FC = () => {
     totalAllocated,
     remainingToAllocate,
     updateAllocations,
-    updateAvailableFunds,
     resetFundSources
   } = useAppContext();
   
@@ -29,6 +28,8 @@ const AllocationPage: React.FC = () => {
   const [newSourceIds, setNewSourceIds] = useState<string[]>([]);
   const latestSourceRef = useRef<string | null>(null);
   const [isAllocating, setIsAllocating] = useState(false);
+  const [manualAllocations, setManualAllocations] = useState<{[id: string]: number}>({});
+  const [isDistributingExcess, setIsDistributingExcess] = useState(false);
 
   // Calculate the unallocated amount directly (funds that haven't been allocated)
   const unallocatedFunds = totalFunds - totalAllocated;
@@ -43,6 +44,29 @@ const AllocationPage: React.FC = () => {
       unallocatedFunds    // This is funds - allocated (what's left unallocated)
     });
   }, [totalFunds, totalRequired, totalAllocated, remainingToAllocate, unallocatedFunds]);
+
+  // Initialize manual allocations when accounts change
+  useEffect(() => {
+    if (accounts.length > 0) {
+      setManualAllocations(prev => {
+        const newAllocations = { ...prev };
+        accounts.forEach(account => {
+          if (newAllocations[account.id] === undefined) {
+            newAllocations[account.id] = 0;
+          }
+        });
+        return newAllocations;
+      });
+    }
+  }, [accounts]);
+
+  // Reset manual allocations when unallocated funds change to 0
+  useEffect(() => {
+    if (unallocatedFunds === 0) {
+      setManualAllocations({});
+      setIsDistributingExcess(false);
+    }
+  }, [unallocatedFunds]);
 
   // Recalculate allocations whenever total funds or outgoings change
   useEffect(() => {
@@ -134,6 +158,8 @@ const AllocationPage: React.FC = () => {
     
     // Reset our tracking states
     setSourceAmounts({});
+    setManualAllocations({});
+    setIsDistributingExcess(false);
     
     // Track the new source to ensure placeholder shows
     setNewSourceIds([newSourceId]);
@@ -270,6 +296,40 @@ const AllocationPage: React.FC = () => {
     }
   };
 
+  const handleManualAllocationChange = (accountId: string, value: number) => {
+    // Calculate total allocated amount across all accounts
+    const currentTotal = Object.values(manualAllocations).reduce((sum, amount) => sum + amount, 0);
+    const currentAccountAmount = manualAllocations[accountId] || 0;
+    
+    // Calculate the change in allocation
+    const change = value - currentAccountAmount;
+    
+    // Make sure we don't exceed unallocated funds
+    if (currentTotal + change > unallocatedFunds) {
+      // Cap at maximum available
+      const maxAllocation = unallocatedFunds - (currentTotal - currentAccountAmount);
+      value = Math.max(0, maxAllocation);
+    }
+    
+    // Update the manual allocation for this account
+    setManualAllocations(prev => ({
+      ...prev,
+      [accountId]: value
+    }));
+  };
+
+  const handleResetManualAllocations = () => {
+    setManualAllocations({});
+  };
+
+  const getTotalManuallyAllocated = () => {
+    return Object.values(manualAllocations).reduce((sum, amount) => sum + amount, 0);
+  };
+
+  const getRemainingUnallocated = () => {
+    return unallocatedFunds - getTotalManuallyAllocated();
+  };
+
   const totalNeeded = accounts.reduce((sum, account) => {
     const outgoings = getOutgoingsForAccount(account.id);
     return sum + outgoings.reduce((acc, outgoing) => acc + outgoing.amount, 0);
@@ -382,8 +442,77 @@ const AllocationPage: React.FC = () => {
           </div>
           
           {unallocatedFunds > 0 && (
-            <div className="mt-3 p-2 bg-amber-50 border border-amber-100 rounded-md text-amber-700 text-sm">
-              Note: You have {formatCurrency(unallocatedFunds)} in unallocated funds that could be distributed.
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center">
+                  <h4 className="text-sm font-medium text-gray-700">Unallocated Funds: {formatCurrency(unallocatedFunds)}</h4>
+                  <button 
+                    onClick={() => setIsDistributingExcess(!isDistributingExcess)}
+                    className="ml-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                  >
+                    {isDistributingExcess ? 'Hide' : 'Distribute'} 
+                  </button>
+                </div>
+                {isDistributingExcess && getTotalManuallyAllocated() > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<RefreshCcw size={14} />}
+                    onClick={handleResetManualAllocations}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </div>
+              
+              {isDistributingExcess && (
+                <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-sm text-gray-500">Manually Allocated: {formatCurrency(getTotalManuallyAllocated())}</p>
+                    <p className="text-sm text-gray-500">Remaining: {formatCurrency(getRemainingUnallocated())}</p>
+                  </div>
+                  
+                  <div className="space-y-4 mt-3">
+                    {accounts.map(account => {
+                      const currentAllocation = getAllocationForAccount(account.id);
+                      const manualAmount = manualAllocations[account.id] || 0;
+                      const totalForAccount = currentAllocation + manualAmount;
+                      return (
+                        <div key={`manual-${account.id}`} className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <p className="text-sm font-medium" style={{ color: account.color }}>{account.name}</p>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold">{formatCurrency(manualAmount)}</p>
+                              <p className="text-xs text-gray-500">Total: {formatCurrency(totalForAccount)}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max={unallocatedFunds}
+                              step="1"
+                              value={manualAmount}
+                              onChange={(e) => handleManualAllocationChange(account.id, parseInt(e.target.value, 10))}
+                              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                              style={{
+                                background: `linear-gradient(to right, ${account.color} 0%, ${account.color} ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb 100%)`,
+                                accentColor: account.color
+                              }}
+                            />
+                            <button
+                              onClick={() => handleManualAllocationChange(account.id, getRemainingUnallocated() + manualAmount)}
+                              className="text-xs text-indigo-600 hover:text-indigo-800"
+                            >
+                              Max
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -394,8 +523,13 @@ const AllocationPage: React.FC = () => {
           const outgoings = getOutgoingsForAccount(account.id);
           const totalOutgoings = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
           const currentAllocation = getAllocationForAccount(account.id);
+          const manualAllocation = manualAllocations[account.id] || 0;
+          const totalForAccount = currentAllocation + manualAllocation;
           const fundingPercentage = totalOutgoings > 0 
             ? (currentAllocation / totalOutgoings) * 100
+            : 0;
+          const totalFundingPercentage = totalOutgoings > 0
+            ? (totalForAccount / totalOutgoings) * 100
             : 0;
           
           return (
@@ -406,12 +540,25 @@ const AllocationPage: React.FC = () => {
                   <p className="text-sm text-gray-500">{account.description}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-semibold text-gray-900">
-                    {formatCurrency(currentAllocation)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    of {formatCurrency(totalOutgoings)} needed
-                  </p>
+                  {manualAllocation > 0 ? (
+                    <div className="flex flex-col items-end">
+                      <p className="text-lg font-semibold text-gray-900">
+                        {formatCurrency(totalForAccount)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {formatCurrency(totalOutgoings)} needed
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {formatCurrency(currentAllocation)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        of {formatCurrency(totalOutgoings)} needed
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -423,6 +570,16 @@ const AllocationPage: React.FC = () => {
                     backgroundColor: account.color
                   }}
                 />
+                {manualAllocation > 0 && (
+                  <div 
+                    className="h-full transition-all duration-500 ease-out rounded-full mt-[-8px]"
+                    style={{ 
+                      width: `${Math.min(totalFundingPercentage, 100)}%`,
+                      backgroundColor: account.color,
+                      opacity: 0.5
+                    }}
+                  />
+                )}
               </div>
 
               <div className="flex justify-between items-center">
@@ -430,9 +587,13 @@ const AllocationPage: React.FC = () => {
                   {outgoings.length} outgoing{outgoings.length !== 1 ? 's' : ''}
                 </p>
                 <p className={`text-sm font-medium ${
+                  totalFundingPercentage >= 100 ? 'text-emerald-600' : 
                   fundingPercentage >= 100 ? 'text-emerald-600' : 'text-gray-500'
                 }`}>
-                  {Math.round(fundingPercentage)}% Funded
+                  {manualAllocation > 0 
+                    ? `${Math.round(totalFundingPercentage)}% Funded`
+                    : `${Math.round(fundingPercentage)}% Funded`
+                  }
                 </p>
               </div>
             </Card>
