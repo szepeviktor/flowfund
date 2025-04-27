@@ -9,7 +9,6 @@ interface AccountFormProps {
     name: string;
     description?: string;
     color: string;
-    currentAllocation: number;
   };
 }
 
@@ -29,7 +28,6 @@ const AccountForm: React.FC<AccountFormProps> = ({ onClose, initialData }) => {
     name: initialData?.name || '',
     description: initialData?.description || '',
     color: initialData?.color || COLORS[0],
-    currentAllocation: initialData?.currentAllocation || 0,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -96,26 +94,6 @@ const AccountForm: React.FC<AccountFormProps> = ({ onClose, initialData }) => {
           ))}
         </div>
       </div>
-
-      {initialData && (
-        <div>
-          <label htmlFor="allocation" className="block text-sm font-medium text-gray-700 mb-1">
-            Current Allocation
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-            <input
-              type="number"
-              id="allocation"
-              value={formData.currentAllocation}
-              onChange={(e) => setFormData({ ...formData, currentAllocation: parseFloat(e.target.value) || 0 })}
-              className="block w-full pl-8 pr-4 py-2 rounded-md border border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
-              min="0"
-              step="0.01"
-            />
-          </div>
-        </div>
-      )}
 
       <div className="flex justify-end space-x-2 pt-4">
         <Button type="button" variant="outline" onClick={onClose}>

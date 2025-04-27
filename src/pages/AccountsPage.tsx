@@ -23,7 +23,7 @@ const AccountsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto pb-8">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
@@ -37,7 +37,7 @@ const AccountsPage: React.FC = () => {
         </Button>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-6 mb-8">
         {accounts.map((account) => {
           const outgoings = getOutgoingsForAccount(account.id);
           const totalOutgoings = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
@@ -88,7 +88,9 @@ const AccountsPage: React.FC = () => {
                       size="sm"
                       onClick={() => deleteAccount(account.id)}
                       icon={<Trash2 size={16} />}
-                    />
+                    >
+                      Delete
+                    </Button>
                   )}
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Income, Outgoing, Account } from '../types';
+import { Income, Outgoing, Account, FundSource } from '../types';
 
 interface Allocation {
   id: string;
@@ -11,7 +11,8 @@ interface AppContextType {
   // Data
   accounts: Account[];
   outgoings: Outgoing[];
-  availableFunds: number;
+  availableFunds: number; // Keep for backward compatibility
+  fundSources: FundSource[];
   allocations: Allocation[];
   
   // Data manipulation functions
@@ -23,13 +24,18 @@ interface AppContextType {
   updateOutgoing: (outgoing: Outgoing) => void;
   deleteOutgoing: (id: string) => void;
   
-  updateAvailableFunds: (amount: number) => void;
+  updateAvailableFunds: (amount: number) => void; // Keep for backward compatibility
+  addFundSource: (amount: number) => void;
+  updateFundSource: (source: FundSource) => void;
+  deleteFundSource: (id: string) => void;
+  resetFundSources: () => string;
   updateAllocations: (allocations: Allocation[]) => void;
   
   // Derived data
   totalAllocated: number;
   totalRequired: number;
   remainingToAllocate: number;
+  totalFunds: number;
   getOutgoingsForAccount: (accountId: string) => Outgoing[];
   getAllocationForAccount: (accountId: string) => number;
   getAccountById: (id: string) => Account | undefined;
@@ -40,6 +46,7 @@ const STORAGE_KEYS = {
   ACCOUNTS: 'flowfund_accounts',
   OUTGOINGS: 'flowfund_outgoings',
   AVAILABLE_FUNDS: 'flowfund_available_funds',
+  FUND_SOURCES: 'flowfund_fund_sources',
   ALLOCATIONS: 'flowfund_allocations',
 };
 
@@ -73,13 +80,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadFromStorage(STORAGE_KEYS.OUTGOINGS, [])
   );
   
+  // For backward compatibility
   const [availableFunds, setAvailableFunds] = useState<number>(() => 
     loadFromStorage(STORAGE_KEYS.AVAILABLE_FUNDS, 0)
   );
 
+  const [fundSources, setFundSources] = useState<FundSource[]>(() => {
+    const storedSources = loadFromStorage<FundSource[]>(STORAGE_KEYS.FUND_SOURCES, []);
+    
+    // If we have no fund sources but have availableFunds, create an initial source
+    if (storedSources.length === 0 && availableFunds > 0) {
+      return [{
+        id: crypto.randomUUID(),
+        amount: availableFunds
+      }];
+    }
+    
+    return storedSources;
+  });
+
   const [allocations, setAllocations] = useState<Allocation[]>(() =>
     loadFromStorage(STORAGE_KEYS.ALLOCATIONS, [])
   );
+  
+  // Calculated total funds from all sources
+  const totalFunds = fundSources.reduce((sum, source) => sum + source.amount, 0);
+  
+  // Update availableFunds to match total from sources (for backward compatibility)
+  useEffect(() => {
+    setAvailableFunds(totalFunds);
+  }, [totalFunds]);
   
   // Save to localStorage whenever data changes
   useEffect(() => {
@@ -93,6 +123,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.AVAILABLE_FUNDS, availableFunds);
   }, [availableFunds]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.FUND_SOURCES, fundSources);
+  }, [fundSources]);
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.ALLOCATIONS, allocations);
@@ -133,8 +167,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOutgoings(outgoings.filter(outgoing => outgoing.id !== id));
   };
   
+  // Kept for backward compatibility
   const updateAvailableFunds = (amount: number) => {
-    setAvailableFunds(amount);
+    // If no fund sources exist, create one
+    if (fundSources.length === 0) {
+      setFundSources([{
+        id: crypto.randomUUID(),
+        amount: amount
+      }]);
+    } 
+    // If exactly one fund source exists, update it
+    else if (fundSources.length === 1) {
+      setFundSources([{
+        ...fundSources[0],
+        amount: amount
+      }]);
+    } 
+    // If multiple sources exist, adjust the first one to make the total match
+    else {
+      const currentTotal = fundSources.reduce((sum, source) => sum + source.amount, 0);
+      const firstSourceAmount = fundSources[0].amount;
+      const adjustment = amount - currentTotal;
+      
+      // Don't allow negative amounts
+      const newAmount = Math.max(0, firstSourceAmount + adjustment);
+      
+      setFundSources([
+        {
+          ...fundSources[0],
+          amount: newAmount
+        },
+        ...fundSources.slice(1)
+      ]);
+    }
+  };
+
+  const addFundSource = (amount: number) => {
+    setFundSources([
+      ...fundSources,
+      {
+        id: crypto.randomUUID(),
+        amount
+      }
+    ]);
+  };
+
+  const updateFundSource = (updatedSource: FundSource) => {
+    setFundSources(fundSources.map(source => 
+      source.id === updatedSource.id ? updatedSource : source
+    ));
+  };
+
+  const deleteFundSource = (id: string) => {
+    setFundSources(fundSources.filter(source => source.id !== id));
+  };
+
+  const resetFundSources = () => {
+    // Replace all existing fund sources with a single new source with zero amount
+    const newSource = {
+      id: crypto.randomUUID(),
+      amount: 0
+    };
+    setFundSources([newSource]);
+    return newSource.id; // Return the ID of the new source for tracking
   };
 
   const updateAllocations = (newAllocations: Allocation[]) => {
@@ -161,7 +256,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Derived values
   const totalRequired = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
   const totalAllocated = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
-  const remainingToAllocate = availableFunds - totalRequired;
+  const remainingToAllocate = totalFunds - totalRequired;
   
   return (
     <AppContext.Provider value={{
@@ -169,6 +264,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       accounts,
       outgoings,
       availableFunds,
+      fundSources,
       allocations,
       
       // Functions
@@ -181,12 +277,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deleteOutgoing,
       
       updateAvailableFunds,
+      addFundSource,
+      updateFundSource,
+      deleteFundSource,
+      resetFundSources,
       updateAllocations,
       
       // Derived data
       totalAllocated,
       totalRequired,
       remainingToAllocate,
+      totalFunds,
       getOutgoingsForAccount,
       getAllocationForAccount,
       getAccountById,

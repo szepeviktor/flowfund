@@ -15,7 +15,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
-  const { availableFunds, totalRequired, remainingToAllocate } = useAppContext();
+  const { totalFunds, totalRequired, remainingToAllocate, totalAllocated } = useAppContext();
   
   const navLinks = [
     { to: '/', icon: <LayoutDashboard size={20} />, text: 'Dashboard' },
@@ -47,7 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                 <div>
                   <p className="text-sm text-gray-500">Available Funds</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(availableFunds)}
+                    {formatCurrency(totalFunds)}
                   </p>
                 </div>
                 
@@ -55,6 +55,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                   <p className="text-sm text-gray-500">Required</p>
                   <p className="text-lg font-semibold text-gray-900">
                     {formatCurrency(totalRequired)}
+                  </p>
+                </div>
+                
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-sm text-gray-500">Allocated</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {formatCurrency(totalAllocated)}
                   </p>
                 </div>
                 

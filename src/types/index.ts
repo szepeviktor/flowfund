@@ -34,3 +34,8 @@ export interface AllocationItem {
   accountId: string;
   amount: number;
 }
+
+export interface FundSource {
+  id: string;
+  amount: number;
+}

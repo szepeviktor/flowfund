@@ -54,15 +54,19 @@ export const formatRecurrence = (recurrence: string): string => {
 export const getNextOccurrence = (date: Date, recurrence: string): Date => {
   const now = new Date();
   let nextDate = new Date(date);
+  
+  // Set both dates to start of day for accurate comparison
+  now.setHours(0, 0, 0, 0);
+  nextDate.setHours(0, 0, 0, 0);
 
-  // If the date hasn't passed yet, return it
-  if (nextDate > now) return nextDate;
+  // If the date is today or in the future, return it
+  if (nextDate >= now) return nextDate;
 
   // For non-recurring items, return the original date
   if (recurrence === 'none') return nextDate;
 
   // Calculate next occurrence based on recurrence
-  while (nextDate <= now) {
+  while (nextDate < now) {
     switch (recurrence) {
       case 'daily':
         nextDate.setDate(nextDate.getDate() + 1);
@@ -105,9 +109,19 @@ export const daysFromNow = (dateString: string): number => {
 export const getRelativeDateDescription = (dateString: string, recurrence: string = 'none'): string => {
   const originalDate = new Date(dateString);
   const nextDate = getNextOccurrence(originalDate, recurrence);
-  const days = Math.ceil((nextDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   
-  if (days === 0) return 'Today';
+  // Set both dates to start of day for accurate comparison
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const nextDay = new Date(nextDate);
+  nextDay.setHours(0, 0, 0, 0);
+  
+  // Check if nextDate is today
+  if (nextDay.getTime() === now.getTime()) return 'Today';
+  
+  // Calculate days difference
+  const days = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
   if (days === 1) return 'Tomorrow';
   if (days < 0) return `${Math.abs(days)} days ago`;
   if (days < 7) return `In ${days} days`;

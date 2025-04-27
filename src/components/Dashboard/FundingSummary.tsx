@@ -9,11 +9,12 @@ const FundingSummary: React.FC = () => {
     accounts,
     totalAllocated, 
     remainingToAllocate,
-    calculateTotalUpcomingOutgoings
+    calculateTotalUpcomingOutgoings,
+    getAllocationForAccount
   } = useAppContext();
   
   const totalUpcoming = calculateTotalUpcomingOutgoings();
-  const totalAvailable = accounts.reduce((sum, account) => sum + account.currentAllocation, 0);
+  const totalAvailable = totalAllocated;
   const fundingPercentage = totalUpcoming > 0 
     ? (totalAllocated / totalUpcoming) * 100
     : 0;
