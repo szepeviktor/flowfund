@@ -1,11 +1,44 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useAllocation } from '../hooks/useAllocation';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { formatCurrency } from '../utils/formatters';
-import { RefreshCw, Plus, Trash2, RefreshCcw } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, RefreshCcw, SlidersHorizontal } from 'lucide-react';
 import { FundSource } from '../types';
+
+// Use a namespace for localStorage keys to avoid collisions
+const LS_PREFIX = 'flowfund_';
+const LS_MANUAL_ALLOCATIONS = `${LS_PREFIX}manual_allocations_v1`;
+const LS_DISTRIBUTION_STATE = `${LS_PREFIX}distribution_open`;
+
+// Initial state loading functions (defined outside component to prevent recreation)
+const getInitialManualAllocations = (): {[id: string]: number} => {
+  try {
+    const saved = localStorage.getItem(LS_MANUAL_ALLOCATIONS);
+    if (saved) {
+      const parsed = JSON.parse(saved) as Record<string, number>;
+      
+      // Verify structure and content
+      const hasNonZeroValues = Object.values(parsed).some(v => v > 0);
+      if (hasNonZeroValues) {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load initial manual allocations:', error);
+  }
+  
+  return {};
+};
+
+const getInitialDistributingState = (): boolean => {
+  try {
+    return localStorage.getItem(LS_DISTRIBUTION_STATE) === 'true';
+  } catch (error) {
+    return false;
+  }
+};
 
 const AllocationPage: React.FC = () => {
   const { 
@@ -28,37 +61,120 @@ const AllocationPage: React.FC = () => {
   const [newSourceIds, setNewSourceIds] = useState<string[]>([]);
   const latestSourceRef = useRef<string | null>(null);
   const [isAllocating, setIsAllocating] = useState(false);
-  const [manualAllocations, setManualAllocations] = useState<{[id: string]: number}>({});
-  const [isDistributingExcess, setIsDistributingExcess] = useState(false);
+  
+  // Use state with initial values from localStorage
+  const [manualAllocations, setManualAllocations] = useState<{[id: string]: number}>(getInitialManualAllocations());
+  const [isDistributingExcess, setIsDistributingExcess] = useState<boolean>(getInitialDistributingState());
 
   // Calculate the unallocated amount directly (funds that haven't been allocated)
   const unallocatedFunds = totalFunds - totalAllocated;
-  
-  // Monitor changes to key values
-  useEffect(() => {
-    console.log('Context values:', { 
-      totalFunds, 
-      totalRequired, 
-      totalAllocated, 
-      remainingToAllocate, // This is funds - required (available minus needed)
-      unallocatedFunds    // This is funds - allocated (what's left unallocated)
-    });
-  }, [totalFunds, totalRequired, totalAllocated, remainingToAllocate, unallocatedFunds]);
 
-  // Initialize manual allocations when accounts change
+  // Calculate total manually allocated amount
+  const totalManuallyAllocated = useMemo(() => 
+    Object.values(manualAllocations).reduce((sum, amount) => sum + amount, 0),
+    [manualAllocations]
+  );
+
+  // Calculate the remaining amount after both automatic and manual allocations
+  const remainingAfterManualAllocations = remainingToAllocate - totalManuallyAllocated;
+  
+  // Function to save distribution state
+  const saveDistributionState = useCallback((isOpen: boolean) => {
+    try {
+      localStorage.setItem(LS_DISTRIBUTION_STATE, isOpen.toString());
+    } catch (error) {
+      console.error('Failed to save distribution state:', error);
+    }
+  }, []);
+  
+  // Function to save manual allocations
+  const saveManualAllocations = useCallback((allocs: {[id: string]: number}) => {
+    try {
+      const hasNonZeroValues = Object.values(allocs).some(val => val > 0);
+      
+      if (hasNonZeroValues) {
+        localStorage.setItem(LS_MANUAL_ALLOCATIONS, JSON.stringify(allocs));
+      } else if (localStorage.getItem(LS_MANUAL_ALLOCATIONS)) {
+        localStorage.removeItem(LS_MANUAL_ALLOCATIONS);
+      }
+    } catch (error) {
+      console.error('Failed to save manual allocations:', error);
+    }
+  }, []);
+  
+  // Save distribution state when it changes
+  useEffect(() => {
+    saveDistributionState(isDistributingExcess);
+  }, [isDistributingExcess, saveDistributionState]);
+  
+  // Save manual allocations when they change
+  useEffect(() => {
+    saveManualAllocations(manualAllocations);
+  }, [manualAllocations, saveManualAllocations]);
+  
+  // Validate manual allocations against current accounts (only when accounts change)
   useEffect(() => {
     if (accounts.length > 0) {
+      const accountIds = accounts.map(account => account.id);
+      
       setManualAllocations(prev => {
-        const newAllocations = { ...prev };
-        accounts.forEach(account => {
-          if (newAllocations[account.id] === undefined) {
-            newAllocations[account.id] = 0;
+        // Don't do anything if there are no manual allocations
+        if (Object.values(prev).every(val => val === 0)) {
+          return prev;
+        }
+        
+        // Filter to only keep allocations for existing accounts
+        const validated: {[id: string]: number} = {};
+        let hasChanges = false;
+        
+        // Add existing accounts
+        for (const id of accountIds) {
+          // Init with 0 if not present
+          if (prev[id] === undefined) {
+            validated[id] = 0;
+            hasChanges = true;
+          } else {
+            validated[id] = prev[id];
           }
-        });
-        return newAllocations;
+        }
+        
+        // Check if we need to drop any allocations for non-existent accounts
+        for (const id in prev) {
+          if (!accountIds.includes(id)) {
+            hasChanges = true;
+            // Not copying this id to the validated object
+          }
+        }
+        
+        // Only create a new object if needed
+        return hasChanges ? validated : prev;
       });
     }
   }, [accounts]);
+
+  // For debugging - can be commented out in production
+  useEffect(() => {
+    // Only log in development mode
+    if (import.meta.env.DEV) {
+      console.log('Allocation state:', { 
+        totalFunds, 
+        totalRequired, 
+        totalAllocated, 
+        remainingToAllocate,
+        unallocatedFunds,
+        totalManuallyAllocated,
+        remainingAfterManualAllocations
+      });
+    }
+  }, [
+    totalFunds, 
+    totalRequired, 
+    totalAllocated, 
+    remainingToAllocate, 
+    unallocatedFunds, 
+    totalManuallyAllocated, 
+    remainingAfterManualAllocations
+  ]);
 
   // Reset manual allocations when unallocated funds change to 0
   useEffect(() => {
@@ -160,6 +276,10 @@ const AllocationPage: React.FC = () => {
     setSourceAmounts({});
     setManualAllocations({});
     setIsDistributingExcess(false);
+    
+    // Clear localStorage
+    localStorage.removeItem(LS_MANUAL_ALLOCATIONS);
+    localStorage.removeItem(LS_DISTRIBUTION_STATE);
     
     // Track the new source to ensure placeholder shows
     setNewSourceIds([newSourceId]);
@@ -322,20 +442,14 @@ const AllocationPage: React.FC = () => {
     setManualAllocations({});
   };
 
-  const getTotalManuallyAllocated = () => {
-    return Object.values(manualAllocations).reduce((sum, amount) => sum + amount, 0);
+  const handleToggleDistribution = () => {
+    const newState = !isDistributingExcess;
+    setIsDistributingExcess(newState);
   };
 
   const getRemainingUnallocated = () => {
-    return unallocatedFunds - getTotalManuallyAllocated();
+    return unallocatedFunds - totalManuallyAllocated;
   };
-
-  const totalNeeded = accounts.reduce((sum, account) => {
-    const outgoings = getOutgoingsForAccount(account.id);
-    return sum + outgoings.reduce((acc, outgoing) => acc + outgoing.amount, 0);
-  }, 0);
-
-  const unallocated = totalFunds - totalAllocated;
 
   return (
     <div className="max-w-5xl mx-auto pb-8">
@@ -430,30 +544,41 @@ const AllocationPage: React.FC = () => {
               <p className="text-sm text-gray-500">Total Allocated:</p>
               <p className="text-lg font-semibold">{formatCurrency(totalAllocated)}</p>
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Remaining:</p>
-              <p className={`text-lg font-semibold ${remainingToAllocate < 0 ? 'text-red-600' : remainingToAllocate > 0 ? 'text-emerald-600' : ''}`}>
-                {formatCurrency(remainingToAllocate)}
-                <span className="text-sm ml-1">
-                  {remainingToAllocate < 0 ? '(shortage)' : remainingToAllocate > 0 ? '(surplus)' : ''}
-                </span>
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">
+                  {totalManuallyAllocated > 0 ? 'Remaining after distribution:' : 'Remaining:'}
+                </p>
+                <p className={`text-lg font-semibold ${remainingAfterManualAllocations < 0 ? 'text-red-600' : remainingAfterManualAllocations > 0 ? 'text-emerald-600' : ''}`}>
+                  {formatCurrency(remainingAfterManualAllocations)}
+                  <span className="text-sm ml-1">
+                    {remainingAfterManualAllocations < 0 ? '(shortage)' : remainingAfterManualAllocations > 0 ? '(surplus)' : ''}
+                  </span>
+                </p>
+              </div>
+              {unallocatedFunds > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<SlidersHorizontal size={16} />}
+                  onClick={handleToggleDistribution}
+                >
+                  {isDistributingExcess ? 'Hide' : 'Distribute'}
+                </Button>
+              )}
             </div>
           </div>
           
-          {unallocatedFunds > 0 && (
+          {unallocatedFunds > 0 && isDistributingExcess && (
             <div className="mt-4">
               <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center">
-                  <h4 className="text-sm font-medium text-gray-700">Unallocated Funds: {formatCurrency(unallocatedFunds)}</h4>
-                  <button 
-                    onClick={() => setIsDistributingExcess(!isDistributingExcess)}
-                    className="ml-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
-                  >
-                    {isDistributingExcess ? 'Hide' : 'Distribute'} 
-                  </button>
-                </div>
-                {isDistributingExcess && getTotalManuallyAllocated() > 0 && (
+                <p className="text-sm font-medium text-gray-700">
+                  Manually Allocated: {formatCurrency(totalManuallyAllocated)} 
+                  <span className="text-sm text-gray-500 ml-2">
+                    (Remaining: {formatCurrency(getRemainingUnallocated())})
+                  </span>
+                </p>
+                {totalManuallyAllocated > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -465,54 +590,47 @@ const AllocationPage: React.FC = () => {
                 )}
               </div>
               
-              {isDistributingExcess && (
-                <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <p className="text-sm text-gray-500">Manually Allocated: {formatCurrency(getTotalManuallyAllocated())}</p>
-                    <p className="text-sm text-gray-500">Remaining: {formatCurrency(getRemainingUnallocated())}</p>
-                  </div>
-                  
-                  <div className="space-y-4 mt-3">
-                    {accounts.map(account => {
-                      const currentAllocation = getAllocationForAccount(account.id);
-                      const manualAmount = manualAllocations[account.id] || 0;
-                      const totalForAccount = currentAllocation + manualAmount;
-                      return (
-                        <div key={`manual-${account.id}`} className="space-y-1">
-                          <div className="flex justify-between items-center">
-                            <p className="text-sm font-medium" style={{ color: account.color }}>{account.name}</p>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold">{formatCurrency(manualAmount)}</p>
-                              <p className="text-xs text-gray-500">Total: {formatCurrency(totalForAccount)}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="range"
-                              min="0"
-                              max={unallocatedFunds}
-                              step="1"
-                              value={manualAmount}
-                              onChange={(e) => handleManualAllocationChange(account.id, parseInt(e.target.value, 10))}
-                              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                              style={{
-                                background: `linear-gradient(to right, ${account.color} 0%, ${account.color} ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb 100%)`,
-                                accentColor: account.color
-                              }}
-                            />
-                            <button
-                              onClick={() => handleManualAllocationChange(account.id, getRemainingUnallocated() + manualAmount)}
-                              className="text-xs text-indigo-600 hover:text-indigo-800"
-                            >
-                              Max
-                            </button>
+              <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                <div className="space-y-4 mt-1">
+                  {accounts.map(account => {
+                    const currentAllocation = getAllocationForAccount(account.id);
+                    const manualAmount = manualAllocations[account.id] || 0;
+                    const totalForAccount = currentAllocation + manualAmount;
+                    return (
+                      <div key={`manual-${account.id}`} className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm font-medium" style={{ color: account.color }}>{account.name}</p>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold">{formatCurrency(manualAmount)}</p>
+                            <p className="text-xs text-gray-500">Total: {formatCurrency(totalForAccount)}</p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="range"
+                            min="0"
+                            max={unallocatedFunds}
+                            step="1"
+                            value={manualAmount}
+                            onChange={(e) => handleManualAllocationChange(account.id, parseInt(e.target.value, 10))}
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            style={{
+                              background: `linear-gradient(to right, ${account.color} 0%, ${account.color} ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb ${(manualAmount/unallocatedFunds)*100}%, #e5e7eb 100%)`,
+                              accentColor: account.color
+                            }}
+                          />
+                          <button
+                            onClick={() => handleManualAllocationChange(account.id, getRemainingUnallocated() + manualAmount)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800"
+                          >
+                            Max
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
