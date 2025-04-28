@@ -5,13 +5,14 @@ import Button from '../components/UI/Button';
 import Modal from '../components/UI/Modal';
 import OutgoingForm from '../components/Forms/OutgoingForm';
 import Badge from '../components/UI/Badge';
-import { Calendar, Plus } from 'lucide-react';
+import { Calendar, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate, getRelativeDateDescription, getNextOccurrence } from '../utils/formatters';
-import { Outgoing } from '../types';
+import { Outgoing, RecurrenceType } from '../types';
 
-// Helper type for outgoings with next date
-interface OutgoingWithNextDate extends Outgoing {
-  nextDate: Date;
+// Helper type for outgoings with specific date
+interface OutgoingWithDate extends Outgoing {
+  specificDate: Date;
+  isRepeatedInstance?: boolean; // Flag to indicate this is a repeated instance within the month
 }
 
 // Helper to create human-readable date heading
@@ -44,14 +45,82 @@ const getHeadingSortValue = (heading: string): number => {
   return 3; // All other dates come after
 };
 
+// Helper to get all occurrences of an outgoing within the current month or next occurrence if outside current month
+const getOutgoingOccurrences = (outgoing: Outgoing): OutgoingWithDate[] => {
+  const baseDate = new Date(outgoing.dueDate);
+  const today = new Date();
+  const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  
+  // For non-repeating outgoings or monthly/longer frequencies, just get the next occurrence
+  if (outgoing.recurrence === 'none' || 
+      outgoing.recurrence === 'monthly' || 
+      outgoing.recurrence === 'quarterly' || 
+      outgoing.recurrence === 'yearly') {
+    const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
+    return [{
+      ...outgoing,
+      specificDate: nextDate
+    }];
+  }
+  
+  // For weekly and biweekly, get all occurrences within the current month
+  const occurrences: OutgoingWithDate[] = [];
+  let currentDate = getNextOccurrence(baseDate, outgoing.recurrence);
+  
+  // If the first occurrence is already in next month, just return that
+  if (currentDate >= nextMonth) {
+    return [{
+      ...outgoing,
+      specificDate: currentDate
+    }];
+  }
+  
+  // Add all occurrences within the current month
+  while (currentDate < nextMonth) {
+    occurrences.push({
+      ...outgoing,
+      specificDate: new Date(currentDate.getTime()),
+      isRepeatedInstance: occurrences.length > 0 // Mark as repeated if not the first occurrence
+    });
+    
+    // Move to next occurrence
+    if (outgoing.recurrence === 'weekly') {
+      currentDate.setDate(currentDate.getDate() + 7);
+    } else if (outgoing.recurrence === 'biweekly') {
+      currentDate.setDate(currentDate.getDate() + 14);
+    }
+  }
+  
+  return occurrences;
+};
+
+// Helper to format the badge for recurring payments
+const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean) => {
+  if (recurrence === 'none') {
+    return <Badge variant="info">One-time</Badge>;
+  }
+  
+  if (isRepeatedInstance) {
+    return <Badge variant="warning">Repeating</Badge>;
+  }
+  
+  return <Badge variant="primary">Recurring</Badge>;
+};
+
 const OutgoingsPage: React.FC = () => {
-  const { outgoings, getAccountById } = useAppContext();
+  const { outgoings, getAccountById, deleteOutgoing } = useAppContext();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOutgoing, setEditingOutgoing] = useState<typeof outgoings[0] | undefined>();
+  const [deletingOutgoing, setDeletingOutgoing] = useState<typeof outgoings[0] | undefined>();
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const handleEdit = (outgoing: typeof outgoings[0]) => {
-    setEditingOutgoing(outgoing);
-    setIsModalOpen(true);
+    // Find the original outgoing (not the repeated instance)
+    const originalOutgoing = outgoings.find(o => o.id === outgoing.id);
+    if (originalOutgoing) {
+      setEditingOutgoing(originalOutgoing);
+      setIsModalOpen(true);
+    }
   };
 
   const handleClose = () => {
@@ -59,22 +128,40 @@ const OutgoingsPage: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  // Get the next payment date for each outgoing
-  const nextPayments: OutgoingWithNextDate[] = outgoings.map(outgoing => ({
-    ...outgoing,
-    nextDate: getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence)
-  }));
+  const handleDeleteClick = (e: React.MouseEvent, outgoing: typeof outgoings[0]) => {
+    e.stopPropagation(); // Prevent card click from triggering
+    setDeletingOutgoing(outgoing);
+    setIsDeleteModalOpen(true);
+  };
 
-  // Sort by next payment date
-  const sortedPayments = nextPayments.sort((a, b) => 
-    a.nextDate.getTime() - b.nextDate.getTime()
+  const handleDeleteConfirm = () => {
+    if (deletingOutgoing) {
+      deleteOutgoing(deletingOutgoing.id);
+      setIsDeleteModalOpen(false);
+      setDeletingOutgoing(undefined);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsDeleteModalOpen(false);
+    setDeletingOutgoing(undefined);
+  };
+
+  // Get all occurrences for each outgoing
+  const allOutgoingOccurrences: OutgoingWithDate[] = outgoings.flatMap(outgoing => 
+    getOutgoingOccurrences(outgoing)
+  );
+
+  // Sort by date
+  const sortedOccurrences = allOutgoingOccurrences.sort((a, b) => 
+    a.specificDate.getTime() - b.specificDate.getTime()
   );
 
   // Group outgoings by date heading
-  const groupedOutgoings: { [heading: string]: OutgoingWithNextDate[] } = {};
+  const groupedOutgoings: { [heading: string]: OutgoingWithDate[] } = {};
   
-  sortedPayments.forEach(outgoing => {
-    const heading = getDateHeading(outgoing.nextDate);
+  sortedOccurrences.forEach(outgoing => {
+    const heading = getDateHeading(outgoing.specificDate);
     if (!groupedOutgoings[heading]) {
       groupedOutgoings[heading] = [];
     }
@@ -121,13 +208,14 @@ const OutgoingsPage: React.FC = () => {
                 {heading}
               </h2>
               <div className="grid gap-3">
-                {outgoings.map((outgoing) => {
+                {outgoings.map((outgoing, index) => {
                   const account = getAccountById(outgoing.accountId);
+                  const key = `${outgoing.id}-${index}`;
                   
                   return (
                     <Card 
-                      key={outgoing.id}
-                      className="hover:border-indigo-100 transition-colors"
+                      key={key}
+                      className={`hover:border-indigo-100 transition-colors ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}`}
                       onClick={() => handleEdit(outgoing)}
                     >
                       <div className="flex items-center">
@@ -141,24 +229,33 @@ const OutgoingsPage: React.FC = () => {
                         <div className="flex-grow">
                           <div className="flex items-center gap-3">
                             <h3 className="text-lg font-semibold text-gray-900">{outgoing.name}</h3>
-                            <Badge 
-                              variant={outgoing.recurrence === 'none' ? 'info' : 'primary'}
-                            >
-                              {outgoing.recurrence === 'none' ? 'One-time' : 'Recurring'}
-                            </Badge>
+                            {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance)}
                           </div>
                           <p className="text-sm text-gray-500">
-                            {account?.name} • {getRelativeDateDescription(outgoing.dueDate, outgoing.recurrence)}
+                            {account?.name} • {outgoing.isRepeatedInstance ? 
+                              `Due on ${formatDate(outgoing.specificDate.toISOString())}` : 
+                              getRelativeDateDescription(outgoing.dueDate, outgoing.recurrence)}
                           </p>
                         </div>
                         
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-gray-900">
+                        <div className="text-right flex items-center">
+                          <p className="text-lg font-semibold text-gray-900 mr-4">
                             {formatCurrency(outgoing.amount)}
                           </p>
-                          <p className="text-sm text-gray-500">
-                            Next due {formatDate(outgoing.nextDate.toISOString())}
+                          <p className="text-sm text-gray-500 mr-4">
+                            {outgoing.isRepeatedInstance ? 
+                              'Recurring payment' : 
+                              `Next due ${formatDate(outgoing.specificDate.toISOString())}`}
                           </p>
+                          {!outgoing.isRepeatedInstance && (
+                            <button 
+                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                              onClick={(e) => handleDeleteClick(e, outgoing)}
+                              aria-label="Delete outgoing"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </Card>
@@ -186,6 +283,26 @@ const OutgoingsPage: React.FC = () => {
           onClose={handleClose}
           initialData={editingOutgoing}
         />
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={handleDeleteCancel}
+        title="Delete Outgoing"
+      >
+        <div className="p-4">
+          <p className="mb-4">
+            Are you sure you want to delete "{deletingOutgoing?.name}"? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={handleDeleteCancel}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleDeleteConfirm}>
+              Delete
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
