@@ -41,6 +41,9 @@ const getInitialDistributingState = (): boolean => {
   }
 };
 
+// Add this at the top of the file, after imports
+const DEBUG_ALLOCATIONS = false; // Set to true only when debugging allocation calculations
+
 const AllocationPage: React.FC = () => {
   const { 
     accounts, 
@@ -85,7 +88,7 @@ const AllocationPage: React.FC = () => {
     const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing): number => {
       // Skip outgoings that are paused
       if (outgoing.isPaused) {
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
           console.log(`AllocationPage - Outgoing (${outgoing.name}): Skipped - paused`);
         }
         return 0;
@@ -99,7 +102,7 @@ const AllocationPage: React.FC = () => {
         
         // Ensure dates are valid
         if (isNaN(planStartDate.getTime()) || isNaN(dueDate.getTime()) || planStartDate >= dueDate) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
             console.log(`Payment plan (${outgoing.name}): Invalid dates, return 0`);
           }
           return 0;
@@ -148,7 +151,7 @@ const AllocationPage: React.FC = () => {
           }
         }
         
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
           console.log(`AllocationPage - Payment plan (${outgoing.name}): ${installmentsInPeriod} installments in period, ${installmentAmount} each, total ${totalAmount}`);
         }
         return totalAmount;
@@ -161,12 +164,12 @@ const AllocationPage: React.FC = () => {
       if (outgoing.recurrence === 'none' && !outgoing.isCustomRecurrence) {
         const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
         if (nextDate >= startDate && nextDate <= endDate) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
             console.log(`AllocationPage - One-time (${outgoing.name}): In period, amount ${outgoing.amount}`);
           }
           return outgoing.amount;
         }
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
           console.log(`AllocationPage - One-time (${outgoing.name}): Not in period, return 0`);
         }
         return 0;
@@ -182,7 +185,7 @@ const AllocationPage: React.FC = () => {
       
       // If the first occurrence is already beyond the end date, no need to process further
       if (currentDate > endDate) {
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
           console.log(`AllocationPage - Recurring (${outgoing.name}): First occurrence beyond pay period, return 0`);
         }
         return 0;
@@ -216,7 +219,7 @@ const AllocationPage: React.FC = () => {
         
         // Safety check in case we've gone past the end date while finding the first occurrence
         if (currentDate > endDate) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
             console.log(`AllocationPage - Recurring (${outgoing.name}): No occurrences in pay period, return 0`);
           }
           return 0;
@@ -274,7 +277,7 @@ const AllocationPage: React.FC = () => {
         }
       }
       
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
         console.log(`AllocationPage - Recurring (${outgoing.name}): ${occurrencesCount} occurrences in period, ${outgoing.amount} each, total ${totalAmount}`);
       }
       return totalAmount;
@@ -286,7 +289,7 @@ const AllocationPage: React.FC = () => {
       return total + amount;
     }, 0);
     
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
       console.log(`AllocationPage - Total required for pay period: ${total}`);
     }
     
@@ -561,7 +564,7 @@ const AllocationPage: React.FC = () => {
   // For debugging - can be commented out in production
   useEffect(() => {
     // Only log in development mode
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && DEBUG_ALLOCATIONS) {
       console.log('Allocation state:', { 
       totalFunds, 
       totalRequired, 

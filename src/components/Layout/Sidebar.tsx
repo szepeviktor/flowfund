@@ -11,6 +11,8 @@ import { useAppContext } from '../../context/AppContext';
 import { formatCurrency, formatDate, getNextOccurrence } from '../../utils/formatters';
 import { Outgoing } from '../../types';
 
+const DEBUG_SIDEBAR = false; // Set to true only when debugging sidebar calculations
+
 interface SidebarProps {
   isOpen: boolean;
   closeSidebar: () => void;
@@ -41,7 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
     const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing): number => {
       // Skip outgoings that are paused
       if (outgoing.isPaused) {
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_SIDEBAR) {
           console.log(`Outgoing (${outgoing.name}): Skipped - paused`);
         }
         return 0;
@@ -55,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
         
         // Ensure dates are valid
         if (isNaN(planStartDate.getTime()) || isNaN(dueDate.getTime()) || planStartDate >= dueDate) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV && DEBUG_SIDEBAR) {
             console.log(`Payment plan (${outgoing.name}): Invalid dates, return 0`);
           }
           return 0;
@@ -104,7 +106,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
           }
         }
         
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_SIDEBAR) {
           console.log(`Payment plan (${outgoing.name}): ${installmentsInPeriod} installments in period, ${installmentAmount} each, total ${totalAmount}`);
           console.log(`  Pay period: ${startDate.toDateString()} - ${endDate.toDateString()}`);
           console.log(`  Plan period: ${planStartDate.toDateString()} - ${dueDate.toDateString()}`);
@@ -119,12 +121,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
       if (outgoing.recurrence === 'none' && !outgoing.isCustomRecurrence) {
         const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
         if (nextDate >= startDate && nextDate <= endDate) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV && DEBUG_SIDEBAR) {
             console.log(`One-time (${outgoing.name}): In period, amount ${outgoing.amount}`);
           }
           return outgoing.amount;
         }
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_SIDEBAR) {
           console.log(`One-time (${outgoing.name}): Not in period, return 0`);
         }
         return 0;
@@ -140,7 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
       
       // If the first occurrence is already beyond the end date, no need to process further
       if (currentDate > endDate) {
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && DEBUG_SIDEBAR) {
           console.log(`Recurring (${outgoing.name}): First occurrence beyond pay period, return 0`);
         }
         return 0;
@@ -174,7 +176,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
         
         // Safety check in case we've gone past the end date while finding the first occurrence
         if (currentDate > endDate) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV && DEBUG_SIDEBAR) {
             console.log(`Recurring (${outgoing.name}): No occurrences in pay period, return 0`);
           }
           return 0;
@@ -232,7 +234,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
         }
       }
       
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV && DEBUG_SIDEBAR) {
         console.log(`Recurring (${outgoing.name}): ${occurrencesCount} occurrences in period, ${outgoing.amount} each, total ${totalAmount}`);
       }
       return totalAmount;
@@ -244,7 +246,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
       return total + amount;
     }, 0);
     
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && DEBUG_SIDEBAR) {
       console.log(`Total required for pay period: ${total}`);
     }
     
