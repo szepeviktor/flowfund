@@ -180,16 +180,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addOutgoing = (outgoing: Omit<Outgoing, 'id'>) => {
     const newOutgoing = { ...outgoing, id: crypto.randomUUID() };
     setOutgoings([...outgoings, newOutgoing]);
+    // Reset manual allocations when outgoings change
+    localStorage.removeItem('flowfund_manual_allocations_v1');
   };
   
   const updateOutgoing = (updatedOutgoing: Outgoing) => {
     setOutgoings(outgoings.map(outgoing => 
       outgoing.id === updatedOutgoing.id ? updatedOutgoing : outgoing
     ));
+    // Reset manual allocations when outgoings change
+    localStorage.removeItem('flowfund_manual_allocations_v1');
   };
   
   const deleteOutgoing = (id: string) => {
     setOutgoings(outgoings.filter(outgoing => outgoing.id !== id));
+    // Reset manual allocations when outgoings change
+    localStorage.removeItem('flowfund_manual_allocations_v1');
   };
   
   // Kept for backward compatibility
