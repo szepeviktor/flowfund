@@ -81,6 +81,7 @@ interface OutgoingFormProps {
     accountId: string;
     notes?: string;
     paymentPlan?: PaymentPlan;
+    isPaused?: boolean;
   };
 }
 
@@ -133,6 +134,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
     recurrenceUnit: initialData?.recurrenceUnit || 'week' as 'day' | 'week' | 'month' | 'year',
     accountId: initialData?.accountId || accounts[0]?.id || '',
     notes: initialData?.notes || '',
+    isPaused: initialData?.isPaused || false,
     paymentPlan: initialData?.paymentPlan ? {
       ...initialData.paymentPlan,
       // Ensure startDate is properly formatted for the date input (YYYY-MM-DD)
@@ -266,6 +268,8 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
       recurrenceUnit: formData.recurrence === 'custom' ? formData.recurrenceUnit : undefined,
       // Flag to indicate this is a custom recurrence
       isCustomRecurrence: formData.recurrence === 'custom',
+      // Include the paused state
+      isPaused: formData.isPaused,
       // Only include payment plan if enabled
       paymentPlan: showPaymentPlan ? {
         ...formData.paymentPlan,
@@ -444,7 +448,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
       )}
 
       <Select
-        id="accountId"
+        id="account"
         label="Account"
         value={formData.accountId}
         onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
@@ -458,7 +462,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
         ))}
       </Select>
 
-      <div>
+      <div className="mb-4">
         <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
           Notes (Optional)
         </label>
@@ -469,6 +473,24 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
           className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
           rows={3}
         />
+      </div>
+
+      {/* Pause toggle switch */}
+      <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">Pause Outgoing</h3>
+          <p className="text-sm text-gray-500">Temporarily exclude from required funds calculation</p>
+        </div>
+        <button 
+          type="button" 
+          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${formData.isPaused ? 'bg-indigo-600' : 'bg-gray-200'}`}
+          onClick={() => setFormData({ ...formData, isPaused: !formData.isPaused })}
+        >
+          <span className="sr-only">Toggle paused</span>
+          <span 
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${formData.isPaused ? 'translate-x-5' : 'translate-x-0'}`}
+          />
+        </button>
       </div>
 
       {/* Payment Plan Section - Only show if frequency is eligible */}

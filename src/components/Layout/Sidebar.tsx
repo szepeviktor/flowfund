@@ -39,6 +39,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
   const requiredForPayPeriod = useMemo(() => {
     // Helper function to get all occurrences of an outgoing within the pay period
     const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing): number => {
+      // Skip outgoings that are paused
+      if (outgoing.isPaused) {
+        if (import.meta.env.DEV) {
+          console.log(`Outgoing (${outgoing.name}): Skipped - paused`);
+        }
+        return 0;
+      }
+      
       // Check if this outgoing has a payment plan
       if (outgoing.paymentPlan?.enabled) {
         let totalAmount = 0;

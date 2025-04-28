@@ -198,6 +198,14 @@ const getRecurrenceDescription = (recurrence: RecurrenceType, isCustomRecurrence
   }
 };
 
+// Helper to get the badge for outgoing status (paused)
+const getPausedBadge = (isPaused?: boolean): JSX.Element | null => {
+  if (isPaused) {
+    return <Badge variant="danger" className="bg-gray-100 text-gray-800 border-gray-200">Paused</Badge>;
+  }
+  return null;
+};
+
 const OutgoingsPage: React.FC = () => {
   const { 
     outgoings, 
@@ -295,6 +303,11 @@ const OutgoingsPage: React.FC = () => {
 
   // Helper to get all occurrences of an outgoing within the pay period
   const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing): OutgoingWithDate[] => {
+    // Skip outgoings that are paused
+    if (outgoing.isPaused) {
+      return [];
+    }
+    
     // Check if this outgoing has a payment plan
     if (outgoing.paymentPlan?.enabled) {
       // Return payment plan installments instead of the regular occurrence
@@ -482,7 +495,9 @@ const OutgoingsPage: React.FC = () => {
 
   // Get the total amount for each account
   const getAccountTotal = (accountId: string): number => {
-    return outgoingsByAccount[accountId]?.reduce((sum, outgoing) => sum + outgoing.amount, 0) || 0;
+    return outgoingsByAccount[accountId]?.reduce((sum, outgoing) => 
+      // Only include non-paused outgoings in the total
+      outgoing.isPaused ? sum : sum + outgoing.amount, 0) || 0;
   };
 
   const handleEdit = (outgoing: OutgoingWithDate | Outgoing) => {
@@ -612,6 +627,31 @@ const OutgoingsPage: React.FC = () => {
     return totalInstallments;
   };
 
+  // Helper function to create badge with amount + paused status
+  const getOutgoingAmountDisplay = (outgoing: Outgoing, showInstallments: boolean = false) => {
+    const isPaused = outgoing.isPaused;
+    const isPaymentPlan = outgoing.paymentPlan?.enabled;
+    const totalInstallments = isPaymentPlan ? calculateInstallments(outgoing) : 0;
+    const installmentAmount = outgoing.paymentPlan?.installmentAmount || 
+      (totalInstallments > 0 ? Math.ceil((outgoing.amount / totalInstallments) * 100) / 100 : outgoing.amount);
+    
+    return (
+      <div className="text-right">
+        <p className={`text-lg font-semibold ${isPaused ? 'text-gray-400' : 'text-gray-900'}`}>
+          {formatCurrency(outgoing.amount, currency)}
+        </p>
+        {isPaymentPlan && showInstallments && (
+          <p className="text-xs text-gray-500">
+            {totalInstallments} payments of {formatCurrency(installmentAmount, currency)}
+          </p>
+        )}
+        {isPaused && (
+          <p className="text-xs text-gray-400 italic">Not included in required funds</p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-5xl mx-auto pb-8">
       <div className="flex justify-between items-center mb-6">
@@ -685,7 +725,8 @@ const OutgoingsPage: React.FC = () => {
                             key={key}
                             className={`hover:border-indigo-100 transition-colors
                               ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}
-                              ${outgoing.isPaymentPlanInstallment ? 'border-l-4 border-l-amber-300' : ''}`}
+                              ${outgoing.isPaymentPlanInstallment ? 'border-l-4 border-l-amber-300' : ''}
+                              ${outgoing.isPaused ? 'opacity-60' : ''}`}
                             onClick={() => handleEdit(outgoing)}
                           >
                             <div className="flex items-center">
@@ -711,6 +752,7 @@ const OutgoingsPage: React.FC = () => {
                                     outgoing.recurrenceInterval, 
                                     outgoing.recurrenceUnit
                                   )}
+                                  {getPausedBadge(outgoing.isPaused)}
                                 </div>
                                 <p className="text-sm text-gray-500">
                                   {account?.name} • Due on {formatDate(outgoing.specificDate.toISOString())}
@@ -722,10 +764,8 @@ const OutgoingsPage: React.FC = () => {
                               </div>
                               
                               <div className="flex items-center gap-4">
-                                <div className="text-right">
-                                  <p className="text-lg font-semibold text-gray-900">
-                                    {formatCurrency(outgoing.amount, currency)}
-                                  </p>
+                                <div className="mr-2">
+                                  {getOutgoingAmountDisplay(outgoing)}
                                 </div>
                                 <button 
                                   className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
@@ -764,7 +804,8 @@ const OutgoingsPage: React.FC = () => {
                           key={key}
                           className={`hover:border-indigo-100 transition-colors 
                             ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}
-                            ${outgoing.isPaymentPlanInstallment ? 'border-l-4 border-l-amber-300' : ''}`}
+                            ${outgoing.isPaymentPlanInstallment ? 'border-l-4 border-l-amber-300' : ''}
+                            ${outgoing.isPaused ? 'opacity-60' : ''}`}
                           onClick={() => handleEdit(outgoing)}
                         >
                           <div className="flex items-center">
@@ -790,6 +831,7 @@ const OutgoingsPage: React.FC = () => {
                                   outgoing.recurrenceInterval, 
                                   outgoing.recurrenceUnit
                                 )}
+                                {getPausedBadge(outgoing.isPaused)}
                               </div>
                               <p className="text-sm text-gray-500">
                                 {account?.name} • {outgoing.isRepeatedInstance || outgoing.isPaymentPlanInstallment ? 
@@ -803,19 +845,8 @@ const OutgoingsPage: React.FC = () => {
                             </div>
                             
                             <div className="flex items-center gap-4">
-                              <div className="text-right">
-                                <p className="text-lg font-semibold text-gray-900">
-                                  {formatCurrency(outgoing.amount, currency)}
-                                </p>
-                                <p className="text-sm text-gray-500">
-                                  {outgoing.isPaymentPlanInstallment ? (
-                                    `Installment for ${formatDate(new Date(outgoing.dueDate).toISOString())}`
-                                  ) : outgoing.isRepeatedInstance ? (
-                                    getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)
-                                  ) : (
-                                    `Next due ${formatDate(outgoing.specificDate.toISOString())}`
-                                  )}
-                                </p>
+                              <div className="mr-2">
+                                {getOutgoingAmountDisplay(outgoing)}
                               </div>
                               <button 
                                 className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
@@ -880,7 +911,7 @@ const OutgoingsPage: React.FC = () => {
                       key={outgoing.id}
                       className={`hover:border-indigo-100 transition-colors py-3 ${
                         outgoing.paymentPlan?.enabled ? 'border-l-4 border-l-amber-300' : ''
-                      }`}
+                      } ${outgoing.isPaused ? 'opacity-60' : ''}`}
                       onClick={() => handleEdit(outgoing)}
                     >
                       <div className="flex items-center">
@@ -900,6 +931,7 @@ const OutgoingsPage: React.FC = () => {
                                 Payment Plan
                               </Badge>
                             )}
+                            {getPausedBadge(outgoing.isPaused)}
                           </div>
                           <p className="text-xs text-gray-500">
                             {getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)}
@@ -914,9 +946,9 @@ const OutgoingsPage: React.FC = () => {
                         </div>
                         
                         <div className="text-right flex items-center">
-                          <p className="text-lg font-semibold text-gray-900 mr-4">
-                            {formatCurrency(outgoing.amount, currency)}
-                          </p>
+                          <div className="mr-2">
+                            {getOutgoingAmountDisplay(outgoing)}
+                          </div>
                           <button 
                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                             onClick={(e) => handleDeleteClick(e, outgoing)}
@@ -954,7 +986,9 @@ const OutgoingsPage: React.FC = () => {
                     return (
                       <Card 
                         key={outgoing.id}
-                        className="hover:border-indigo-100 transition-colors py-3"
+                        className={`hover:border-indigo-100 transition-colors py-3 ${
+                          outgoing.paymentPlan?.enabled ? 'border-l-4 border-l-amber-300' : ''
+                        } ${outgoing.isPaused ? 'opacity-60' : ''}`}
                         onClick={() => handleEdit(outgoing)}
                       >
                         <div className="flex items-center">
@@ -974,6 +1008,7 @@ const OutgoingsPage: React.FC = () => {
                                   Payment Plan
                                 </Badge>
                               )}
+                              {getPausedBadge(outgoing.isPaused)}
                             </div>
                             <p className="text-xs text-gray-500">
                               {getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)} • {account?.name}
@@ -987,9 +1022,9 @@ const OutgoingsPage: React.FC = () => {
                           </div>
                           
                           <div className="text-right flex items-center">
-                            <p className="text-lg font-semibold text-gray-900 mr-4">
-                              {formatCurrency(outgoing.amount, currency)}
-                            </p>
+                            <div className="mr-2">
+                              {getOutgoingAmountDisplay(outgoing)}
+                            </div>
                             <button 
                               className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                               onClick={(e) => handleDeleteClick(e, outgoing)}

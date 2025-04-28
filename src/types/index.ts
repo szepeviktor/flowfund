@@ -32,6 +32,7 @@ export interface Outgoing {
   notes?: string;
   accountId: string;
   paymentPlan?: PaymentPlan; // Optional payment plan for saving up for this expense
+  isPaused?: boolean; // Whether the outgoing is temporarily paused
 }
 
 export interface Account {

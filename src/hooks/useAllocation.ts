@@ -79,6 +79,11 @@ export const useAllocation = () => {
    * Helper function to get all occurrences of an outgoing within the pay period
    */
   const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing, startDate: Date, endDate: Date): Outgoing[] => {
+    // Skip outgoings that are paused
+    if (outgoing.isPaused) {
+      return [];
+    }
+    
     // Check if this outgoing has a payment plan
     if (outgoing.paymentPlan?.enabled) {
       const occurrences: Outgoing[] = [];
