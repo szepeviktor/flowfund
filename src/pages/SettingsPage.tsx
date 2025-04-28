@@ -14,12 +14,36 @@ const SettingsPage: React.FC = () => {
     updateCurrency
   } = useAppContext();
 
-  const [dayOfMonth, setDayOfMonth] = useState(payCycle.dayOfMonth.toString());
   const [frequency, setFrequency] = useState(payCycle.frequency);
-  const [lastPayDate, setLastPayDate] = useState(payCycle.lastPayDate || new Date().toISOString().split('T')[0]);
+  const [dayOfMonth, setDayOfMonth] = useState(payCycle.dayOfMonth.toString());
+  const [dayOfWeek, setDayOfWeek] = useState<number>(
+    payCycle.lastPayDate 
+      ? new Date(payCycle.lastPayDate).getDay() 
+      : new Date().getDay()
+  );
   const [selectedCurrency, setSelectedCurrency] = useState(currency);
 
   const handleSavePayCycle = () => {
+    // Calculate a reference date for weekly/fortnightly based on selected day of week
+    let lastPayDate = '';
+    
+    if (frequency === 'weekly' || frequency === 'biweekly') {
+      const today = new Date();
+      const currentDayOfWeek = today.getDay();
+      const daysToSubtract = (currentDayOfWeek - dayOfWeek + 7) % 7;
+      
+      // Get the most recent occurrence of the selected day of week
+      const referenceDateObj = new Date();
+      referenceDateObj.setDate(today.getDate() - daysToSubtract);
+      
+      // If today is the selected day, use today
+      if (daysToSubtract === 0) {
+        referenceDateObj.setTime(today.getTime());
+      }
+      
+      lastPayDate = referenceDateObj.toISOString().split('T')[0];
+    }
+    
     updatePayCycle({
       dayOfMonth: parseInt(dayOfMonth, 10),
       frequency,
@@ -44,38 +68,46 @@ const SettingsPage: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Pay Cycle</h2>
         <div className="space-y-4">
           <Select
-            id="dayOfMonth"
-            label="Day of Month"
-            value={dayOfMonth}
-            onChange={(e) => setDayOfMonth(e.target.value)}
-          >
-            {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-              <option key={day} value={day}>
-                {day}
-              </option>
-            ))}
-          </Select>
-
-          <Select
             id="frequency"
-            label="Frequency"
+            label="Pay Frequency"
             value={frequency}
             onChange={(e) => setFrequency(e.target.value as 'monthly' | 'biweekly' | 'weekly')}
           >
             <option value="monthly">Monthly</option>
-            <option value="biweekly">Bi-weekly</option>
+            <option value="biweekly">Fortnightly</option>
             <option value="weekly">Weekly</option>
           </Select>
 
+          {frequency === 'monthly' && (
+            <Select
+              id="dayOfMonth"
+              label="Day of Month"
+              value={dayOfMonth}
+              onChange={(e) => setDayOfMonth(e.target.value)}
+            >
+              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </Select>
+          )}
+
           {(frequency === 'biweekly' || frequency === 'weekly') && (
-            <Input
-              type="date"
-              id="lastPayDate"
-              label="Last Pay Date"
-              value={lastPayDate}
-              onChange={(e) => setLastPayDate(e.target.value)}
-              required
-            />
+            <Select
+              id="dayOfWeek"
+              label="Day of Week"
+              value={dayOfWeek.toString()}
+              onChange={(e) => setDayOfWeek(parseInt(e.target.value, 10))}
+            >
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+            </Select>
           )}
 
           <div className="flex justify-end space-x-2 pt-4">
