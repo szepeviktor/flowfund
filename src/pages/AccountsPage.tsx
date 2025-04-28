@@ -8,7 +8,7 @@ import { PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
 
 const AccountsPage: React.FC = () => {
-  const { accounts, getOutgoingsForAccount, deleteAccount } = useAppContext();
+  const { accounts, getOutgoingsForAccount, deleteAccount, currency } = useAppContext();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<typeof accounts[0] | undefined>();
 
@@ -71,7 +71,7 @@ const AccountsPage: React.FC = () => {
                 <div className="flex items-center">
                   <div className="text-right mr-4">
                     <p className="text-lg font-semibold text-gray-900">
-                      {formatCurrency(totalOutgoings)}
+                      {formatCurrency(totalOutgoings, currency)}
                     </p>
                     <p className="text-xs text-gray-500">
                       {outgoings.length} outgoing{outgoings.length !== 1 ? 's' : ''}

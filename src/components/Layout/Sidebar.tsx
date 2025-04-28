@@ -22,7 +22,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
     outgoings,
     totalAllocated,
     getPayPeriod,
-    payCycle
+    payCycle,
+    currency
   } = useAppContext();
   
   const { startDate, endDate } = useMemo(() => getPayPeriod(), [getPayPeriod, payCycle]);
@@ -158,7 +159,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                 <div>
                   <p className="text-sm text-gray-500">Available Funds</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(totalFunds)}
+                    {formatCurrency(totalFunds, currency)}
                   </p>
                 </div>
                 
@@ -167,14 +168,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                     <p className="text-sm text-gray-500">Required</p>
                   </div>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(requiredForPayPeriod)}
+                    {formatCurrency(requiredForPayPeriod, currency)}
                   </p>
                 </div>
                 
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm text-gray-500">Allocated</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(totalAllocated)}
+                    {formatCurrency(totalAllocated, currency)}
                   </p>
                 </div>
                 
@@ -183,7 +184,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                   <p className={`text-xl font-bold ${
                     remainingForPayPeriod >= 0 ? 'text-emerald-600' : 'text-red-600'
                   }`}>
-                    {formatCurrency(remainingForPayPeriod)}
+                    {formatCurrency(remainingForPayPeriod, currency)}
                   </p>
                 </div>
               </div>

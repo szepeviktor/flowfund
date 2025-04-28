@@ -55,7 +55,8 @@ const AllocationPage: React.FC = () => {
     remainingToAllocate,
     updateAllocations,
     resetFundSources,
-    getPayPeriod
+    getPayPeriod,
+    currency
   } = useAppContext();
   
   const { updateFundsAndAllocations, addFundSource, updateFundSource, deleteFundSource } = useAllocation();
@@ -626,7 +627,7 @@ const AllocationPage: React.FC = () => {
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Available Funds</h2>
-            <p className="text-gray-500 text-sm">Total: {formatCurrency(totalFunds)}</p>
+            <p className="text-gray-500 text-sm">Total: {formatCurrency(totalFunds, currency)}</p>
           </div>
           <div className="flex space-x-2">
             <Button
@@ -696,15 +697,15 @@ const AllocationPage: React.FC = () => {
           <div className="grid grid-cols-2 gap-x-8 gap-y-2">
             <div>
               <p className="text-sm text-gray-500">Total Available Funds:</p>
-              <p className="text-lg font-semibold">{formatCurrency(totalFunds)}</p>
+              <p className="text-lg font-semibold">{formatCurrency(totalFunds, currency)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Required for Pay Period:</p>
-              <p className="text-lg font-semibold">{formatCurrency(totalRequiredForPayPeriod)}</p>
+              <p className="text-lg font-semibold">{formatCurrency(totalRequiredForPayPeriod, currency)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Total Allocated:</p>
-              <p className="text-lg font-semibold">{formatCurrency(totalAllocated)}</p>
+              <p className="text-lg font-semibold">{formatCurrency(totalAllocated, currency)}</p>
             </div>
             <div className="flex items-center justify-between">
               <div>
@@ -712,7 +713,7 @@ const AllocationPage: React.FC = () => {
                   {totalManuallyAllocated > 0 ? 'Remaining after distribution:' : 'Remaining:'}
                 </p>
                 <p className={`text-lg font-semibold ${remainingAfterManualAllocations < 0 ? 'text-red-600' : remainingAfterManualAllocations > 0 ? 'text-emerald-600' : ''}`}>
-                  {formatCurrency(remainingAfterManualAllocations)}
+                  {formatCurrency(remainingAfterManualAllocations, currency)}
                 </p>
               </div>
               {remainingForPayPeriod > 0 && (
@@ -732,9 +733,9 @@ const AllocationPage: React.FC = () => {
             <div className="mt-4">
               <div className="flex justify-between items-center mb-2">
                 <p className="text-sm font-medium text-gray-700">
-                  Manually Allocated: {formatCurrency(totalManuallyAllocated)} 
+                  Manually Allocated: {formatCurrency(totalManuallyAllocated, currency)} 
                   <span className="text-sm text-gray-500 ml-2">
-                    (Remaining: {formatCurrency(getRemainingUnallocated())})
+                    (Remaining: {formatCurrency(getRemainingUnallocated(), currency)})
                   </span>
                 </p>
                 {totalManuallyAllocated > 0 && (
@@ -769,8 +770,8 @@ const AllocationPage: React.FC = () => {
                         <div className="flex justify-between items-center">
                           <p className="text-sm font-medium" style={{ color: account.color }}>{account.name}</p>
                           <div className="text-right">
-                            <p className="text-sm font-semibold">{formatCurrency(manualAllocation)}</p>
-                            <p className="text-xs text-gray-500">Total: {formatCurrency(totalForAccount)}</p>
+                            <p className="text-sm font-semibold">{formatCurrency(manualAllocation, currency)}</p>
+                            <p className="text-xs text-gray-500">Total: {formatCurrency(totalForAccount, currency)}</p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -829,19 +830,19 @@ const AllocationPage: React.FC = () => {
                   {manualAllocation > 0 ? (
                     <div className="flex flex-col items-end">
                       <p className="text-lg font-semibold text-gray-900">
-                        {formatCurrency(totalForAccount)}
+                        {formatCurrency(totalForAccount, currency)}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {formatCurrency(totalOutgoings)} needed
+                        {formatCurrency(totalOutgoings, currency)} needed
                       </p>
                     </div>
                   ) : (
                     <div>
                       <p className="text-lg font-semibold text-gray-900">
-                        {formatCurrency(currentAllocation)}
+                        {formatCurrency(currentAllocation, currency)}
                       </p>
                       <p className="text-sm text-gray-500">
-                        of {formatCurrency(totalOutgoings)} needed
+                        of {formatCurrency(totalOutgoings, currency)} needed
                       </p>
                     </div>
                   )}

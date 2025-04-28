@@ -146,7 +146,8 @@ const OutgoingsPage: React.FC = () => {
     payCycle, 
     updatePayCycle,
     getPayPeriod,
-    accounts
+    accounts,
+    currency
   } = useAppContext();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -430,7 +431,7 @@ const OutgoingsPage: React.FC = () => {
                             <div className="flex items-center gap-4">
                               <div className="text-right">
                                 <p className="text-lg font-semibold text-gray-900">
-                                  {formatCurrency(outgoing.amount)}
+                                  {formatCurrency(outgoing.amount, currency)}
                                 </p>
                                 <p className="text-sm text-gray-500">
                                   {outgoing.isRepeatedInstance ? 
@@ -483,7 +484,7 @@ const OutgoingsPage: React.FC = () => {
                     {account.name}
                   </h2>
                   <p className="text-md font-medium">
-                    Total: {formatCurrency(getAccountTotal(account.id))}
+                    Total: {formatCurrency(getAccountTotal(account.id), currency)}
                   </p>
                 </div>
                 
@@ -507,7 +508,7 @@ const OutgoingsPage: React.FC = () => {
                         
                         <div className="text-right flex items-center">
                           <p className="text-lg font-semibold text-gray-900 mr-4">
-                            {formatCurrency(outgoing.amount)}
+                            {formatCurrency(outgoing.amount, currency)}
                           </p>
                           <button 
                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"

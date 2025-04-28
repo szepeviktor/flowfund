@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Card from '../components/UI/Card';
 import Badge from '../components/UI/Badge';
@@ -6,7 +6,7 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 const CalendarPage: React.FC = () => {
-  const { outgoings, getAccountById } = useAppContext();
+  const { outgoings, getAccountById, currency } = useAppContext();
 
   // Sort outgoings by due date
   const sortedOutgoings = [...outgoings].sort((a, b) => 
@@ -66,7 +66,7 @@ const CalendarPage: React.FC = () => {
                     
                     <div className="text-right">
                       <p className="text-lg font-semibold text-gray-900">
-                        {formatCurrency(outgoing.amount)}
+                        {formatCurrency(outgoing.amount, currency)}
                       </p>
                       <p className="text-sm text-gray-500">
                         Due {formatDate(outgoing.dueDate)}

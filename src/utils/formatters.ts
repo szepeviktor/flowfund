@@ -2,11 +2,13 @@
 
 /**
  * Format a number as currency
+ * @param amount The amount to format
+ * @param currencyCode The ISO currency code (e.g., 'USD', 'EUR')
  */
-export const formatCurrency = (amount: number): string => {
+export const formatCurrency = (amount: number, currencyCode: string = 'USD'): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: currencyCode,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);
