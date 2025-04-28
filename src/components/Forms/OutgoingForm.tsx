@@ -11,7 +11,7 @@ type ExtendedRecurrenceType = RecurrenceType | 'custom';
 
 // Helper function to determine if an outgoing frequency is eligible for payment plans
 // based on the pay cycle frequency
-const isEligibleForPaymentPlan = (outgoingFrequency: ExtendedRecurrenceType, payCycleFrequency: string): boolean => {
+const isEligibleForPaymentPlan = (outgoingFrequency: ExtendedRecurrenceType, payCycleFrequency: string, recurrenceInterval?: number, recurrenceUnit?: string): boolean => {
   // Define the frequency order (from most frequent to least frequent)
   const frequencyOrder: Record<string, number> = {
     'daily': 1,
@@ -27,8 +27,40 @@ const isEligibleForPaymentPlan = (outgoingFrequency: ExtendedRecurrenceType, pay
   // If outgoing frequency is "none" (one-time), it's eligible for payment plan
   if (outgoingFrequency === 'none') return true;
   
-  // If it's a custom recurrence, we'll need to check the interval and unit
-  if (outgoingFrequency === 'custom') return true;
+  // If it's a custom recurrence, evaluate based on interval and unit by converting to days
+  if (outgoingFrequency === 'custom' && recurrenceInterval && recurrenceUnit) {
+    // Convert the custom recurrence to days
+    let customRecurrenceDays = 0;
+    
+    if (recurrenceUnit === 'day') {
+      customRecurrenceDays = recurrenceInterval;
+    } else if (recurrenceUnit === 'week') {
+      customRecurrenceDays = recurrenceInterval * 7;
+    } else if (recurrenceUnit === 'month') {
+      customRecurrenceDays = recurrenceInterval * 30;
+    } else if (recurrenceUnit === 'year') {
+      customRecurrenceDays = recurrenceInterval * 365;
+    }
+    
+    // Convert pay cycle frequency to days (approximate)
+    let payCycleDays = 0;
+    if (payCycleFrequency === 'daily') {
+      payCycleDays = 1;
+    } else if (payCycleFrequency === 'weekly') {
+      payCycleDays = 7;
+    } else if (payCycleFrequency === 'biweekly') {
+      payCycleDays = 14;
+    } else if (payCycleFrequency === 'monthly') {
+      payCycleDays = 30;
+    } else if (payCycleFrequency === 'quarterly') {
+      payCycleDays = 90;
+    } else if (payCycleFrequency === 'yearly') {
+      payCycleDays = 365;
+    }
+    
+    // Outgoing should be less frequent (more days) than pay cycle for payment plan to make sense
+    return customRecurrenceDays > payCycleDays;
+  }
   
   // Compare the frequencies - only allow payment plans for less frequent outgoings
   return frequencyOrder[outgoingFrequency] > frequencyOrder[payCycleFrequency];
@@ -111,10 +143,11 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
       frequency: 'monthly' as PaymentPlan['frequency'],
       installmentAmount: undefined
     },
+    _recurrenceIntervalEmpty: false,
   });
 
   // Check if the current outgoing frequency is eligible for payment plans
-  const isPlanEligible = isEligibleForPaymentPlan(formData.recurrence, payCycle.frequency);
+  const isPlanEligible = isEligibleForPaymentPlan(formData.recurrence, payCycle.frequency, formData.recurrenceInterval, formData.recurrenceUnit);
   
   // Only show payment plan option if eligible
   const [showPaymentPlan, setShowPaymentPlan] = useState(
@@ -160,6 +193,40 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
         }
       }
       
+      // Adjust installments based on outgoing frequency if it's custom
+      // For custom recurrences, we want to ensure the payment plan makes sense
+      if (formData.recurrence === 'custom' && formData.recurrenceInterval && formData.recurrenceUnit) {
+        // Get the outgoing frequency in days (approximate)
+        let outgoingFrequencyInDays = 30; // default to monthly
+        
+        if (formData.recurrenceUnit === 'day') {
+          outgoingFrequencyInDays = formData.recurrenceInterval;
+        } else if (formData.recurrenceUnit === 'week') {
+          outgoingFrequencyInDays = formData.recurrenceInterval * 7;
+        } else if (formData.recurrenceUnit === 'month') {
+          outgoingFrequencyInDays = formData.recurrenceInterval * 30;
+        } else if (formData.recurrenceUnit === 'year') {
+          outgoingFrequencyInDays = formData.recurrenceInterval * 365;
+        }
+        
+        // Get payment plan frequency in days (approximate)
+        let paymentFrequencyInDays = 30; // default to monthly
+        
+        if (formData.paymentPlan.frequency === 'weekly') {
+          paymentFrequencyInDays = 7;
+        } else if (formData.paymentPlan.frequency === 'biweekly') {
+          paymentFrequencyInDays = 14;
+        } else if (formData.paymentPlan.frequency === 'monthly') {
+          paymentFrequencyInDays = 30;
+        }
+        
+        // If outgoing is more frequent than payment plan, adjust installments
+        if (outgoingFrequencyInDays < paymentFrequencyInDays) {
+          const ratio = Math.ceil(paymentFrequencyInDays / outgoingFrequencyInDays);
+          installments = Math.max(installments, Math.ceil(installments / ratio));
+        }
+      }
+      
       // Calculate suggested installment amount (round to 2 decimal places)
       if (installments > 0) {
         // Calculate amount per installment (round up to nearest cent)
@@ -174,7 +241,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
       setSuggestedInstallment(null);
       setTotalInstallments(0);
     }
-  }, [formData.amount, formData.dueDate, formData.paymentPlan.startDate, formData.paymentPlan.frequency, showPaymentPlan]);
+  }, [formData.amount, formData.dueDate, formData.paymentPlan.startDate, formData.paymentPlan.frequency, formData.recurrence, formData.recurrenceInterval, formData.recurrenceUnit, showPaymentPlan]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -275,7 +342,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
         onChange={(e) => {
           const newRecurrence = e.target.value as ExtendedRecurrenceType;
           // Check if the new recurrence is eligible for payment plans
-          const newIsEligible = isEligibleForPaymentPlan(newRecurrence, payCycle.frequency);
+          const newIsEligible = isEligibleForPaymentPlan(newRecurrence, payCycle.frequency, formData.recurrenceInterval, formData.recurrenceUnit);
           
           setFormData({ 
             ...formData, 
@@ -313,11 +380,39 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
               <input
                 type="number"
                 id="recurrenceInterval"
-                value={formData.recurrenceInterval}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  recurrenceInterval: parseInt(e.target.value) || 1 
-                })}
+                value={formData._recurrenceIntervalEmpty ? '' : formData.recurrenceInterval}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Check if the value is empty first, then convert to number or use 1 as fallback
+                  if (value === '') {
+                    // For temporary empty state, use 1 in the state but don't display it
+                    // This keeps the state typed as a number but allows editing
+                    setFormData({
+                      ...formData,
+                      recurrenceInterval: 1,
+                      // Add a flag to track that the field is being cleared
+                      _recurrenceIntervalEmpty: true
+                    });
+                  } else {
+                    setFormData({
+                      ...formData,
+                      recurrenceInterval: parseInt(value) || 1,
+                      _recurrenceIntervalEmpty: false
+                    });
+                  }
+                }}
+                onBlur={() => {
+                  // When the user leaves the field, make sure we have a valid value
+                  // Reset the empty state flag
+                  if (formData._recurrenceIntervalEmpty) {
+                    setFormData({
+                      ...formData,
+                      _recurrenceIntervalEmpty: false
+                    });
+                  }
+                }}
+                // Use the actual input's value instead of the state
+                // This allows the field to appear empty while being edited
                 className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
                 min="1"
                 required
@@ -342,8 +437,8 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
             </div>
           </div>
           <p className="text-sm text-gray-600">
-            This will repeat every {formData.recurrenceInterval} {formData.recurrenceUnit}
-            {formData.recurrenceInterval > 1 ? 's' : ''} starting from the due date.
+            This will repeat every {formData._recurrenceIntervalEmpty ? '' : formData.recurrenceInterval || 1} {formData.recurrenceUnit}
+            {(!formData._recurrenceIntervalEmpty && formData.recurrenceInterval !== 1) ? 's' : ''} starting from the due date.
           </p>
         </div>
       )}
@@ -398,13 +493,13 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
           {showPaymentPlan && (
             <div className="bg-gray-50 rounded-md p-4 space-y-4">
               <p className="text-sm text-gray-600">
-                Set up a payment plan to save for this expense over time.
+                Set up a payment plan to spread this expense over multiple installments.
               </p>
               
               <Input
                 type="date"
                 id="startDate"
-                label="Start Saving From"
+                label="Start Paying From"
                 value={formData.paymentPlan.startDate}
                 onChange={(e) => setFormData({ 
                   ...formData, 
@@ -420,7 +515,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
 
               <Select
                 id="frequency"
-                label="Saving Frequency"
+                label="Payment Frequency"
                 value={formData.paymentPlan.frequency}
                 onChange={(e) => setFormData({ 
                   ...formData, 
@@ -454,7 +549,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
               <div>
                 <div className="flex items-center justify-between">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Custom Installment Amount (Optional)
+                    Custom Payment Amount (Optional)
                   </label>
                   {formData.paymentPlan.installmentAmount && (
                     <button
@@ -495,7 +590,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
                 </p>
                 {formData.paymentPlan.installmentAmount && (
                   <p className="text-xs text-amber-600 mt-1">
-                    With this amount, you'll save {currencySymbol}{(formData.paymentPlan.installmentAmount * totalInstallments).toFixed(2)} in total ({totalInstallments} installments)
+                    With this amount, you'll pay {currencySymbol}{(formData.paymentPlan.installmentAmount * totalInstallments).toFixed(2)} in total ({totalInstallments} installments)
                   </p>
                 )}
               </div>

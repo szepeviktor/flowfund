@@ -581,6 +581,36 @@ const OutgoingsPage: React.FC = () => {
   const hasPaymentPlanInstallment = (outgoing: any): outgoing is OutgoingWithDate & { isPaymentPlanInstallment: boolean } => {
     return 'isPaymentPlanInstallment' in outgoing;
   };
+  
+  // Helper function to calculate the number of installments for a payment plan
+  const calculateInstallments = (outgoing: Outgoing): number => {
+    if (!outgoing.paymentPlan?.enabled) return 0;
+    
+    const startDate = new Date(outgoing.paymentPlan.startDate);
+    const dueDate = new Date(outgoing.dueDate);
+    
+    // Ensure dates are valid
+    if (isNaN(startDate.getTime()) || isNaN(dueDate.getTime()) || startDate >= dueDate) {
+      return 0;
+    }
+    
+    // Count total installments
+    let currentDate = new Date(startDate);
+    let totalInstallments = 0;
+    
+    while (currentDate < dueDate) {
+      totalInstallments++;
+      if (outgoing.paymentPlan.frequency === 'weekly') {
+        currentDate.setDate(currentDate.getDate() + 7);
+      } else if (outgoing.paymentPlan.frequency === 'biweekly') {
+        currentDate.setDate(currentDate.getDate() + 14);
+      } else if (outgoing.paymentPlan.frequency === 'monthly') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
+    }
+    
+    return totalInstallments;
+  };
 
   return (
     <div className="max-w-5xl mx-auto pb-8">
@@ -875,8 +905,10 @@ const OutgoingsPage: React.FC = () => {
                             {getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)}
                             <> • Next: {getNextPaymentDate(outgoing)}</>
                             {outgoing.paymentPlan?.enabled && (
-                              <span> • Saving: {formatCurrency(outgoing.paymentPlan.installmentAmount || 0, currency)}/
-                              {outgoing.paymentPlan.frequency}</span>
+                              <span> • Installment: {formatCurrency(outgoing.paymentPlan.installmentAmount || 
+                                // Calculate installment if not specified
+                                (outgoing.amount / (calculateInstallments(outgoing) || 1)), 
+                                currency)}/{outgoing.paymentPlan.frequency}</span>
                             )}
                           </p>
                         </div>
@@ -946,8 +978,10 @@ const OutgoingsPage: React.FC = () => {
                             <p className="text-xs text-gray-500">
                               {getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)} • {account?.name}
                               {outgoing.paymentPlan?.enabled && (
-                                <span> • Saving: {formatCurrency(outgoing.paymentPlan.installmentAmount || 0, currency)}/
-                                {outgoing.paymentPlan.frequency}</span>
+                                <span> • Installment: {formatCurrency(outgoing.paymentPlan.installmentAmount || 
+                                  // Calculate installment if not specified
+                                  (outgoing.amount / (calculateInstallments(outgoing) || 1)), 
+                                  currency)}/{outgoing.paymentPlan.frequency}</span>
                               )}
                             </p>
                           </div>
