@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
+import Select from '../components/UI/Select';
+import Input from '../components/UI/Input';
 import { formatDate } from '../utils/formatters';
 
 const SettingsPage: React.FC = () => {
@@ -41,76 +43,71 @@ const SettingsPage: React.FC = () => {
       <Card className="mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Pay Cycle</h2>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Day of Month
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="31"
-              value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-          </div>
+          <Select
+            id="dayOfMonth"
+            label="Day of Month"
+            value={dayOfMonth}
+            onChange={(e) => setDayOfMonth(e.target.value)}
+          >
+            {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+              <option key={day} value={day}>
+                {day}
+              </option>
+            ))}
+          </Select>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Frequency
-            </label>
-            <select
-              value={frequency}
-              onChange={(e) => setFrequency(e.target.value as 'monthly' | 'biweekly')}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            >
-              <option value="monthly">Monthly</option>
-              <option value="biweekly">Bi-weekly</option>
-            </select>
-          </div>
+          <Select
+            id="frequency"
+            label="Frequency"
+            value={frequency}
+            onChange={(e) => setFrequency(e.target.value as 'monthly' | 'biweekly' | 'weekly')}
+          >
+            <option value="monthly">Monthly</option>
+            <option value="biweekly">Bi-weekly</option>
+            <option value="weekly">Weekly</option>
+          </Select>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Last Pay Date
-            </label>
-            <input
+          {(frequency === 'biweekly' || frequency === 'weekly') && (
+            <Input
               type="date"
+              id="lastPayDate"
+              label="Last Pay Date"
               value={lastPayDate}
               onChange={(e) => setLastPayDate(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              required
             />
-          </div>
+          )}
 
-          <Button onClick={handleSavePayCycle}>
-            Save Pay Cycle
-          </Button>
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button onClick={handleSavePayCycle}>
+              Save Pay Cycle
+            </Button>
+          </div>
         </div>
       </Card>
 
       <Card>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Currency</h2>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Currency
-            </label>
-            <select
-              value={selectedCurrency}
-              onChange={(e) => setSelectedCurrency(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            >
-              <option value="USD">USD ($)</option>
-              <option value="EUR">EUR (€)</option>
-              <option value="GBP">GBP (£)</option>
-              <option value="CAD">CAD ($)</option>
-              <option value="AUD">AUD ($)</option>
-              <option value="NZD">NZD ($)</option>
-            </select>
-          </div>
+          <Select
+            id="currency"
+            label="Currency"
+            value={selectedCurrency}
+            onChange={(e) => setSelectedCurrency(e.target.value)}
+          >
+            <option value="USD">USD ($)</option>
+            <option value="EUR">EUR (€)</option>
+            <option value="GBP">GBP (£)</option>
+            <option value="CAD">CAD ($)</option>
+            <option value="AUD">AUD ($)</option>
+            <option value="NZD">NZD ($)</option>
+          </Select>
 
-          <Button onClick={handleSaveCurrency}>
-            Save Currency
-          </Button>
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button onClick={handleSaveCurrency}>
+              Save Currency
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

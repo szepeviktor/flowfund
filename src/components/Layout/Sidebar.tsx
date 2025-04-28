@@ -25,6 +25,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
   } = useAppContext();
   
   const { startDate, endDate } = useMemo(() => getPayPeriod(), [getPayPeriod, payCycle]);
+  
+  // Calculate the actual next pay date (one day after the end of the pay period)
+  const nextPayDate = useMemo(() => {
+    const date = new Date(endDate);
+    date.setDate(date.getDate() + 1);
+    return date;
+  }, [endDate]);
 
   // Calculate required funds for the current pay period
   const requiredForPayPeriod = useMemo(() => {
@@ -76,7 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-500">Next Payday</p>
                   <span className="text-sm text-gray-900">
-                    {formatDate(endDate.toISOString())}
+                    {formatDate(nextPayDate.toISOString())}
                   </span>
                 </div>
               </div>

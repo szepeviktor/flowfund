@@ -5,6 +5,7 @@ import Button from '../components/UI/Button';
 import Modal from '../components/UI/Modal';
 import OutgoingForm from '../components/Forms/OutgoingForm';
 import Badge from '../components/UI/Badge';
+import Select from '../components/UI/Select';
 import { Calendar, Plus, Trash2, Settings, List, Clock } from 'lucide-react';
 import { formatCurrency, formatDate, getRelativeDateDescription, getNextOccurrence } from '../utils/formatters';
 import { Outgoing, RecurrenceType, PayCycle } from '../types';
@@ -81,40 +82,30 @@ const PayCycleSettingsForm: React.FC<PayCycleSettingsProps> = ({ onClose, initia
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-1">
-          Pay Frequency
-        </label>
-        <select
-          id="frequency"
-          value={formData.frequency}
-          onChange={(e) => setFormData({ ...formData, frequency: e.target.value as PayCycle['frequency'] })}
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="monthly">Monthly</option>
-          <option value="biweekly">Bi-weekly</option>
-          <option value="weekly">Weekly</option>
-        </select>
-      </div>
+      <Select
+        id="frequency"
+        label="Pay Frequency"
+        value={formData.frequency}
+        onChange={(e) => setFormData({ ...formData, frequency: e.target.value as PayCycle['frequency'] })}
+      >
+        <option value="monthly">Monthly</option>
+        <option value="biweekly">Bi-weekly</option>
+        <option value="weekly">Weekly</option>
+      </Select>
 
       {formData.frequency === 'monthly' && (
-        <div>
-          <label htmlFor="dayOfMonth" className="block text-sm font-medium text-gray-700 mb-1">
-            Pay Day (Day of Month)
-          </label>
-          <select
-            id="dayOfMonth"
-            value={formData.dayOfMonth}
-            onChange={(e) => setFormData({ ...formData, dayOfMonth: parseInt(e.target.value, 10) })}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-          >
-            {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-              <option key={day} value={day}>
-                {day}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select
+          id="dayOfMonth"
+          label="Pay Day (Day of Month)"
+          value={formData.dayOfMonth}
+          onChange={(e) => setFormData({ ...formData, dayOfMonth: parseInt(e.target.value, 10) })}
+        >
+          {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+            <option key={day} value={day}>
+              {day}
+            </option>
+          ))}
+        </Select>
       )}
 
       {(formData.frequency === 'biweekly' || formData.frequency === 'weekly') && (

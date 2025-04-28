@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import Button from '../UI/Button';
+import Select from '../UI/Select';
+import Input from '../UI/Input';
 import { RecurrenceType } from '../../types';
 
 interface OutgoingFormProps {
@@ -86,58 +88,43 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
         </div>
       </div>
 
-      <div>
-        <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-1">
-          Due Date
-        </label>
-        <input
-          type="date"
-          id="dueDate"
-          value={formData.dueDate}
-          onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-          required
-        />
-      </div>
+      <Input
+        type="date"
+        id="dueDate"
+        label="Due Date"
+        value={formData.dueDate}
+        onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+        required
+      />
 
-      <div>
-        <label htmlFor="recurrence" className="block text-sm font-medium text-gray-700 mb-1">
-          Recurrence
-        </label>
-        <select
-          id="recurrence"
-          value={formData.recurrence}
-          onChange={(e) => setFormData({ ...formData, recurrence: e.target.value as RecurrenceType })}
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="none">One-time</option>
-          <option value="weekly">Weekly</option>
-          <option value="biweekly">Bi-weekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="quarterly">Quarterly</option>
-          <option value="yearly">Yearly</option>
-        </select>
-      </div>
+      <Select
+        id="recurrence"
+        label="Recurrence"
+        value={formData.recurrence}
+        onChange={(e) => setFormData({ ...formData, recurrence: e.target.value as RecurrenceType })}
+      >
+        <option value="none">One-time</option>
+        <option value="weekly">Weekly</option>
+        <option value="biweekly">Bi-weekly</option>
+        <option value="monthly">Monthly</option>
+        <option value="quarterly">Quarterly</option>
+        <option value="yearly">Yearly</option>
+      </Select>
 
-      <div>
-        <label htmlFor="accountId" className="block text-sm font-medium text-gray-700 mb-1">
-          Account
-        </label>
-        <select
-          id="accountId"
-          value={formData.accountId}
-          onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-          required
-        >
-          <option value="" disabled>Select an account</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      <Select
+        id="accountId"
+        label="Account"
+        value={formData.accountId}
+        onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+        required
+      >
+        <option value="" disabled>Select an account</option>
+        {accounts.map((account) => (
+          <option key={account.id} value={account.id}>
+            {account.name}
+          </option>
+        ))}
+      </Select>
 
       <div>
         <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
