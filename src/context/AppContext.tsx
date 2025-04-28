@@ -368,7 +368,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Check if a date falls within the current pay cycle
   const isWithinPayCycle = (date: Date): boolean => {
     const { startDate, endDate } = getPayPeriod();
-    return date >= startDate && date < endDate;
+    return date >= startDate && date <= endDate;
   };
   
   const updateCurrency = (newCurrency: string) => {
