@@ -30,73 +30,83 @@ const AccountsPage: React.FC = () => {
           <p className="text-gray-500 mt-1">Manage your payment accounts</p>
         </div>
         <Button 
-          icon={<Plus size={18} />}
+          variant="primary"
+          size="sm"
+          icon={<Plus size={16} />}
           onClick={() => setIsModalOpen(true)}
         >
           New Account
         </Button>
       </div>
 
-      <div className="grid gap-6 mb-8">
+      <div className="grid gap-3 mb-8">
         {accounts.map((account) => {
           const outgoings = getOutgoingsForAccount(account.id);
           const totalOutgoings = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
+          const hasOutgoings = outgoings.length > 0;
           
           return (
             <Card 
               key={account.id}
-              className="hover:border-indigo-100 transition-colors"
+              className="hover:border-indigo-100 transition-colors py-3"
+              onClick={() => handleEdit(account)}
             >
-              <div className="flex items-start">
+              <div className="flex items-center">
                 <div 
-                  className="w-12 h-12 rounded-full flex items-center justify-center mr-4"
+                  className="w-10 h-10 rounded-full flex items-center justify-center mr-3"
                   style={{ backgroundColor: account.color + '20' }}
                 >
-                  <PiggyBank size={24} style={{ color: account.color }} />
+                  <PiggyBank size={20} style={{ color: account.color }} />
                 </div>
                 
                 <div className="flex-grow">
-                  <h3 className="text-lg font-semibold text-gray-900">{account.name}</h3>
-                  {account.description && (
-                    <p className="text-sm text-gray-500 mt-1">{account.description}</p>
-                  )}
-                  
-                  <div className="mt-4">
-                    <p className="text-sm text-gray-500">Total Outgoings</p>
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-lg font-semibold text-gray-900">
-                        {formatCurrency(totalOutgoings)}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        ({outgoings.length} outgoing{outgoings.length !== 1 ? 's' : ''})
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-md font-medium text-gray-900">{account.name}</h3>
                   </div>
+                  {account.description && (
+                    <p className="text-xs text-gray-500">{account.description}</p>
+                  )}
                 </div>
                 
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEdit(account)}
+                <div className="flex items-center">
+                  <div className="text-right mr-4">
+                    <p className="text-lg font-semibold text-gray-900">
+                      {formatCurrency(totalOutgoings)}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {outgoings.length} outgoing{outgoings.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <button 
+                    className={`p-2 rounded-full transition-colors ${
+                      hasOutgoings 
+                        ? 'text-gray-300 cursor-not-allowed' 
+                        : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!hasOutgoings) {
+                        deleteAccount(account.id);
+                      }
+                    }}
+                    disabled={hasOutgoings}
+                    aria-label={hasOutgoings ? "Cannot delete account with outgoings" : "Delete account"}
+                    title={hasOutgoings ? "Cannot delete account with outgoings" : "Delete account"}
                   >
-                    Edit
-                  </Button>
-                  {outgoings.length === 0 && (
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteAccount(account.id)}
-                      icon={<Trash2 size={16} />}
-                    >
-                      Delete
-                    </Button>
-                  )}
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
             </Card>
           );
         })}
+        
+        {accounts.length === 0 && (
+          <div className="text-center py-12 bg-gray-50 rounded-lg">
+            <p className="text-gray-500">No accounts found</p>
+            <p className="text-sm text-gray-400 mt-1">Click "New Account" to add one</p>
+          </div>
+        )}
       </div>
 
       <Modal
