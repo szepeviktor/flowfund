@@ -25,6 +25,10 @@ export interface Outgoing {
   amount: number;
   dueDate: string; // ISO date string
   recurrence: RecurrenceType;
+  // Custom recurrence fields
+  isCustomRecurrence?: boolean;
+  recurrenceInterval?: number;
+  recurrenceUnit?: 'day' | 'week' | 'month' | 'year';
   notes?: string;
   accountId: string;
   paymentPlan?: PaymentPlan; // Optional payment plan for saving up for this expense

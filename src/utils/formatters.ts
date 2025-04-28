@@ -29,7 +29,11 @@ export const formatDate = (dateString: string): string => {
 /**
  * Get formatted display for recurrence type
  */
-export const formatRecurrence = (recurrence: string): string => {
+export const formatRecurrence = (recurrence: string, isCustomRecurrence?: boolean, recurrenceInterval?: number, recurrenceUnit?: string): string => {
+  if (isCustomRecurrence && recurrenceInterval && recurrenceUnit) {
+    return `Every ${recurrenceInterval} ${recurrenceUnit}${recurrenceInterval > 1 ? 's' : ''}`;
+  }
+  
   switch(recurrence) {
     case 'none':
       return 'One-time';
@@ -53,7 +57,7 @@ export const formatRecurrence = (recurrence: string): string => {
 /**
  * Calculate the next occurrence of a recurring date
  */
-export const getNextOccurrence = (date: Date, recurrence: string): Date => {
+export const getNextOccurrence = (date: Date, recurrence: string, recurrenceInterval?: number, recurrenceUnit?: string): Date => {
   const now = new Date();
   let nextDate = new Date(date);
   
@@ -65,7 +69,28 @@ export const getNextOccurrence = (date: Date, recurrence: string): Date => {
   if (nextDate >= now) return nextDate;
 
   // For non-recurring items, return the original date
-  if (recurrence === 'none') return nextDate;
+  if (recurrence === 'none' && !recurrenceInterval) return nextDate;
+  
+  // For custom recurrence, use the provided interval and unit
+  if (recurrenceInterval && recurrenceUnit) {
+    while (nextDate < now) {
+      switch (recurrenceUnit) {
+        case 'day':
+          nextDate.setDate(nextDate.getDate() + recurrenceInterval);
+          break;
+        case 'week':
+          nextDate.setDate(nextDate.getDate() + (7 * recurrenceInterval));
+          break;
+        case 'month':
+          nextDate.setMonth(nextDate.getMonth() + recurrenceInterval);
+          break;
+        case 'year':
+          nextDate.setFullYear(nextDate.getFullYear() + recurrenceInterval);
+          break;
+      }
+    }
+    return nextDate;
+  }
 
   // Calculate next occurrence based on recurrence
   while (nextDate < now) {

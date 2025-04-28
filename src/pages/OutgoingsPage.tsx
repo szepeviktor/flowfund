@@ -51,13 +51,19 @@ const getHeadingSortValue = (heading: string): number => {
 };
 
 // Helper to format the badge for recurring payments
-const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean, isPaymentPlanInstallment?: boolean): JSX.Element => {
+const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean, isPaymentPlanInstallment?: boolean, isCustomRecurrence?: boolean, recurrenceInterval?: number, recurrenceUnit?: string): JSX.Element => {
   if (isPaymentPlanInstallment) {
     return <Badge variant="warning" className="bg-amber-100 text-amber-800 border-amber-200">Installment</Badge>;
   }
   
-  if (recurrence === 'none') {
+  if (recurrence === 'none' && !isCustomRecurrence) {
     return <Badge variant="info" className="bg-purple-100 text-purple-800 border-purple-200">One-time</Badge>;
+  }
+
+  if (isCustomRecurrence && recurrenceInterval && recurrenceUnit) {
+    return <Badge variant="success" className="bg-green-100 text-green-800 border-green-200">
+      Custom {recurrenceInterval} {recurrenceUnit}{recurrenceInterval > 1 ? 's' : ''}
+    </Badge>;
   }
   
   if (isRepeatedInstance) {
@@ -169,7 +175,11 @@ const PayCycleSettingsForm: React.FC<PayCycleSettingsProps> = ({ onClose, initia
 type ViewMode = 'timeline' | 'list';
 
 // Helper to get a human-readable recurrence description
-const getRecurrenceDescription = (recurrence: RecurrenceType): string => {
+const getRecurrenceDescription = (recurrence: RecurrenceType, isCustomRecurrence?: boolean, recurrenceInterval?: number, recurrenceUnit?: string): string => {
+  if (isCustomRecurrence && recurrenceInterval && recurrenceUnit) {
+    return `Repeats every ${recurrenceInterval} ${recurrenceUnit}${recurrenceInterval > 1 ? 's' : ''}`;
+  }
+  
   switch (recurrence) {
     case 'none':
       return 'One-time payment';
@@ -295,7 +305,7 @@ const OutgoingsPage: React.FC = () => {
     const occurrences: OutgoingWithDate[] = [];
     
     // For non-repeating outgoings, just get the next occurrence
-    if (outgoing.recurrence === 'none') {
+    if (outgoing.recurrence === 'none' && !outgoing.isCustomRecurrence) {
       const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
       
       // Only include if it falls within the pay period or is the next upcoming after the period
@@ -309,7 +319,12 @@ const OutgoingsPage: React.FC = () => {
     }
     
     // For all recurring payments, find occurrences within the pay period
-    let currentDate = getNextOccurrence(baseDate, outgoing.recurrence);
+    let currentDate = getNextOccurrence(
+      baseDate, 
+      outgoing.recurrence, 
+      outgoing.isCustomRecurrence ? outgoing.recurrenceInterval : undefined,
+      outgoing.isCustomRecurrence ? outgoing.recurrenceUnit : undefined
+    );
     
     // If the first occurrence is already beyond the next pay date, show it anyway
     if (currentDate > endDate) {
@@ -322,7 +337,18 @@ const OutgoingsPage: React.FC = () => {
     // Find the first occurrence that falls after the last pay date
     while (currentDate < startDate) {
       // Move to next occurrence based on recurrence type
-      if (outgoing.recurrence === 'weekly') {
+      if (outgoing.isCustomRecurrence && outgoing.recurrenceInterval && outgoing.recurrenceUnit) {
+        // Handle custom recurrence
+        if (outgoing.recurrenceUnit === 'day') {
+          currentDate.setDate(currentDate.getDate() + outgoing.recurrenceInterval);
+        } else if (outgoing.recurrenceUnit === 'week') {
+          currentDate.setDate(currentDate.getDate() + (7 * outgoing.recurrenceInterval));
+        } else if (outgoing.recurrenceUnit === 'month') {
+          currentDate.setMonth(currentDate.getMonth() + outgoing.recurrenceInterval);
+        } else if (outgoing.recurrenceUnit === 'year') {
+          currentDate.setFullYear(currentDate.getFullYear() + outgoing.recurrenceInterval);
+        }
+      } else if (outgoing.recurrence === 'weekly') {
         currentDate.setDate(currentDate.getDate() + 7);
       } else if (outgoing.recurrence === 'biweekly') {
         currentDate.setDate(currentDate.getDate() + 14);
@@ -347,10 +373,16 @@ const OutgoingsPage: React.FC = () => {
       });
       
       // Determine if we should add more occurrences based on recurrence type
-      if (outgoing.recurrence === 'weekly' || outgoing.recurrence === 'biweekly') {
+      if (outgoing.recurrence === 'weekly' || outgoing.recurrence === 'biweekly' || 
+          (outgoing.isCustomRecurrence && outgoing.recurrenceUnit === 'week' && 
+           outgoing.recurrenceInterval && outgoing.recurrenceInterval <= 2)) {
+        
         // Move to next occurrence
         const nextDate = new Date(currentDate);
-        if (outgoing.recurrence === 'weekly') {
+        
+        if (outgoing.isCustomRecurrence && outgoing.recurrenceInterval && outgoing.recurrenceUnit === 'week') {
+          nextDate.setDate(nextDate.getDate() + (7 * outgoing.recurrenceInterval));
+        } else if (outgoing.recurrence === 'weekly') {
           nextDate.setDate(nextDate.getDate() + 7);
         } else {
           nextDate.setDate(nextDate.getDate() + 14);
@@ -363,7 +395,7 @@ const OutgoingsPage: React.FC = () => {
           shouldAddMore = false;
         }
       } else {
-        // For monthly, quarterly, and yearly, we only show one occurrence per pay period
+        // For monthly, quarterly, yearly, and longer intervals, we only show one occurrence per pay period
         shouldAddMore = false;
       }
     }
@@ -433,7 +465,12 @@ const OutgoingsPage: React.FC = () => {
 
   // Format the next payment date for each outgoing in the list view
   const getNextPaymentDate = (outgoing: Outgoing): string => {
-    const nextDate = getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence);
+    const nextDate = getNextOccurrence(
+      new Date(outgoing.dueDate), 
+      outgoing.recurrence,
+      outgoing.isCustomRecurrence ? outgoing.recurrenceInterval : undefined,
+      outgoing.isCustomRecurrence ? outgoing.recurrenceUnit : undefined
+    );
     return formatDate(nextDate.toISOString());
   };
 
@@ -536,6 +573,15 @@ const OutgoingsPage: React.FC = () => {
     }
   };
 
+  // Add type guard functions to avoid linter errors
+  const hasRepeatedInstance = (outgoing: any): outgoing is OutgoingWithDate & { isRepeatedInstance: boolean } => {
+    return 'isRepeatedInstance' in outgoing;
+  };
+
+  const hasPaymentPlanInstallment = (outgoing: any): outgoing is OutgoingWithDate & { isPaymentPlanInstallment: boolean } => {
+    return 'isPaymentPlanInstallment' in outgoing;
+  };
+
   return (
     <div className="max-w-5xl mx-auto pb-8">
       <div className="flex justify-between items-center mb-6">
@@ -627,7 +673,14 @@ const OutgoingsPage: React.FC = () => {
                               <div className="flex-grow">
                                 <div className="flex items-center gap-3">
                                   <h3 className="text-lg font-semibold text-gray-900">{outgoing.name}</h3>
-                                  {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance, outgoing.isPaymentPlanInstallment)}
+                                  {getRecurrenceBadge(
+                                    outgoing.recurrence, 
+                                    hasRepeatedInstance(outgoing) ? outgoing.isRepeatedInstance : undefined, 
+                                    hasPaymentPlanInstallment(outgoing) ? outgoing.isPaymentPlanInstallment : undefined, 
+                                    outgoing.isCustomRecurrence, 
+                                    outgoing.recurrenceInterval, 
+                                    outgoing.recurrenceUnit
+                                  )}
                                 </div>
                                 <p className="text-sm text-gray-500">
                                   {account?.name} • Due on {formatDate(outgoing.specificDate.toISOString())}
@@ -699,7 +752,14 @@ const OutgoingsPage: React.FC = () => {
                             <div className="flex-grow">
                               <div className="flex items-center gap-3">
                                 <h3 className="text-lg font-semibold text-gray-900">{outgoing.name}</h3>
-                                {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance, outgoing.isPaymentPlanInstallment)}
+                                {getRecurrenceBadge(
+                                  outgoing.recurrence, 
+                                  hasRepeatedInstance(outgoing) ? outgoing.isRepeatedInstance : undefined, 
+                                  hasPaymentPlanInstallment(outgoing) ? outgoing.isPaymentPlanInstallment : undefined, 
+                                  outgoing.isCustomRecurrence, 
+                                  outgoing.recurrenceInterval, 
+                                  outgoing.recurrenceUnit
+                                )}
                               </div>
                               <p className="text-sm text-gray-500">
                                 {account?.name} • {outgoing.isRepeatedInstance || outgoing.isPaymentPlanInstallment ? 
@@ -721,7 +781,7 @@ const OutgoingsPage: React.FC = () => {
                                   {outgoing.isPaymentPlanInstallment ? (
                                     `Installment for ${formatDate(new Date(outgoing.dueDate).toISOString())}`
                                   ) : outgoing.isRepeatedInstance ? (
-                                    getRecurrenceDescription(outgoing.recurrence)
+                                    getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)
                                   ) : (
                                     `Next due ${formatDate(outgoing.specificDate.toISOString())}`
                                   )}
@@ -797,7 +857,14 @@ const OutgoingsPage: React.FC = () => {
                         <div className="flex-grow pl-2">
                           <div className="flex items-center gap-3">
                             <h3 className="text-md font-medium text-gray-900">{outgoing.name}</h3>
-                            {getRecurrenceBadge(outgoing.recurrence)}
+                            {getRecurrenceBadge(
+                              outgoing.recurrence, 
+                              hasRepeatedInstance(outgoing) ? outgoing.isRepeatedInstance : undefined, 
+                              hasPaymentPlanInstallment(outgoing) ? outgoing.isPaymentPlanInstallment : undefined, 
+                              outgoing.isCustomRecurrence, 
+                              outgoing.recurrenceInterval, 
+                              outgoing.recurrenceUnit
+                            )}
                             {outgoing.paymentPlan?.enabled && (
                               <Badge variant="warning" className="bg-amber-100 text-amber-800 border-amber-200">
                                 Payment Plan
@@ -805,7 +872,7 @@ const OutgoingsPage: React.FC = () => {
                             )}
                           </div>
                           <p className="text-xs text-gray-500">
-                            {getRecurrenceDescription(outgoing.recurrence)}
+                            {getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)}
                             <> • Next: {getNextPaymentDate(outgoing)}</>
                             {outgoing.paymentPlan?.enabled && (
                               <span> • Saving: {formatCurrency(outgoing.paymentPlan.installmentAmount || 0, currency)}/
@@ -862,7 +929,14 @@ const OutgoingsPage: React.FC = () => {
                           <div className="flex-grow pl-2">
                             <div className="flex items-center gap-3">
                               <h3 className="text-md font-medium text-gray-900">{outgoing.name}</h3>
-                              {getRecurrenceBadge(outgoing.recurrence)}
+                              {getRecurrenceBadge(
+                                outgoing.recurrence, 
+                                hasRepeatedInstance(outgoing) ? outgoing.isRepeatedInstance : undefined, 
+                                hasPaymentPlanInstallment(outgoing) ? outgoing.isPaymentPlanInstallment : undefined, 
+                                outgoing.isCustomRecurrence, 
+                                outgoing.recurrenceInterval, 
+                                outgoing.recurrenceUnit
+                              )}
                               {outgoing.paymentPlan?.enabled && (
                                 <Badge variant="warning" className="bg-amber-100 text-amber-800 border-amber-200">
                                   Payment Plan
@@ -870,7 +944,7 @@ const OutgoingsPage: React.FC = () => {
                               )}
                             </div>
                             <p className="text-xs text-gray-500">
-                              {getRecurrenceDescription(outgoing.recurrence)} • {account?.name}
+                              {getRecurrenceDescription(outgoing.recurrence, outgoing.isCustomRecurrence, outgoing.recurrenceInterval, outgoing.recurrenceUnit)} • {account?.name}
                               {outgoing.paymentPlan?.enabled && (
                                 <span> • Saving: {formatCurrency(outgoing.paymentPlan.installmentAmount || 0, currency)}/
                                 {outgoing.paymentPlan.frequency}</span>

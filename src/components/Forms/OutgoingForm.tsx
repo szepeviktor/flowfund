@@ -5,9 +5,13 @@ import Select from '../UI/Select';
 import Input from '../UI/Input';
 import { RecurrenceType, PaymentPlan } from '../../types';
 
+// We need to extend the RecurrenceType to include 'custom'
+// Since we can't modify the imported type directly, we'll create a local extended type
+type ExtendedRecurrenceType = RecurrenceType | 'custom';
+
 // Helper function to determine if an outgoing frequency is eligible for payment plans
 // based on the pay cycle frequency
-const isEligibleForPaymentPlan = (outgoingFrequency: RecurrenceType, payCycleFrequency: string): boolean => {
+const isEligibleForPaymentPlan = (outgoingFrequency: ExtendedRecurrenceType, payCycleFrequency: string): boolean => {
   // Define the frequency order (from most frequent to least frequent)
   const frequencyOrder: Record<string, number> = {
     'daily': 1,
@@ -16,16 +20,21 @@ const isEligibleForPaymentPlan = (outgoingFrequency: RecurrenceType, payCycleFre
     'monthly': 4,
     'quarterly': 5,
     'yearly': 6,
-    'none': 7 // One-time payments
+    'none': 7, // One-time payments
+    'custom': 8, // Custom recurrence - we'll handle it specially
   };
   
   // If outgoing frequency is "none" (one-time), it's eligible for payment plan
   if (outgoingFrequency === 'none') return true;
   
+  // If it's a custom recurrence, we'll need to check the interval and unit
+  if (outgoingFrequency === 'custom') return true;
+  
   // Compare the frequencies - only allow payment plans for less frequent outgoings
   return frequencyOrder[outgoingFrequency] > frequencyOrder[payCycleFrequency];
 };
 
+// Extended interface for form data that includes custom recurrence fields
 interface OutgoingFormProps {
   onClose: () => void;
   initialData?: {
@@ -33,7 +42,10 @@ interface OutgoingFormProps {
     name: string;
     amount: number;
     dueDate: string;
-    recurrence: RecurrenceType;
+    recurrence: ExtendedRecurrenceType;
+    recurrenceInterval?: number;
+    recurrenceUnit?: 'day' | 'week' | 'month' | 'year';
+    isCustomRecurrence?: boolean;
     accountId: string;
     notes?: string;
     paymentPlan?: PaymentPlan;
@@ -72,11 +84,21 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
   // Get the currency symbol
   const currencySymbol = getCurrencySymbol(currency);
   
+  // When loading an existing outgoing, check if it has custom recurrence fields
+  const isExistingCustomRecurrence = initialData?.isCustomRecurrence && 
+    initialData.recurrenceInterval !== undefined && 
+    initialData.recurrenceUnit !== undefined;
+  
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
     amount: initialData ? initialData.amount : '',
     dueDate: initialData?.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-    recurrence: initialData?.recurrence || 'monthly' as RecurrenceType,
+    // If the initialData has isCustomRecurrence flag, set recurrence to 'custom'
+    recurrence: isExistingCustomRecurrence 
+      ? 'custom' as ExtendedRecurrenceType 
+      : initialData?.recurrence || 'monthly' as ExtendedRecurrenceType,
+    recurrenceInterval: initialData?.recurrenceInterval || 1,
+    recurrenceUnit: initialData?.recurrenceUnit || 'week' as 'day' | 'week' | 'month' | 'year',
     accountId: initialData?.accountId || accounts[0]?.id || '',
     notes: initialData?.notes || '',
     paymentPlan: initialData?.paymentPlan ? {
@@ -157,11 +179,26 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Create a submission-ready data object
     const submissionData = {
       ...formData,
       // Convert amount to number during submission
       amount: typeof formData.amount === 'string' ? parseFloat(formData.amount) || 0 : formData.amount,
       dueDate: new Date(formData.dueDate).toISOString(),
+      // For custom recurrence, we'll keep the actual recurrence fields
+      // but mark with a flag that it's custom
+      recurrence: formData.recurrence === 'custom' 
+        ? (formData.recurrenceUnit === 'week' && formData.recurrenceInterval === 1 ? 'weekly' : 
+           formData.recurrenceUnit === 'month' && formData.recurrenceInterval === 1 ? 'monthly' :
+           formData.recurrenceUnit === 'week' && formData.recurrenceInterval === 2 ? 'biweekly' :
+           formData.recurrenceUnit === 'month' && formData.recurrenceInterval === 3 ? 'quarterly' :
+           formData.recurrenceUnit === 'year' && formData.recurrenceInterval === 1 ? 'yearly' : 'monthly') as RecurrenceType 
+        : formData.recurrence as RecurrenceType,
+      // Include the custom recurrence fields if it's a custom recurrence
+      recurrenceInterval: formData.recurrence === 'custom' ? formData.recurrenceInterval : undefined,
+      recurrenceUnit: formData.recurrence === 'custom' ? formData.recurrenceUnit : undefined,
+      // Flag to indicate this is a custom recurrence
+      isCustomRecurrence: formData.recurrence === 'custom',
       // Only include payment plan if enabled
       paymentPlan: showPaymentPlan ? {
         ...formData.paymentPlan,
@@ -236,7 +273,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
         label="Recurrence"
         value={formData.recurrence}
         onChange={(e) => {
-          const newRecurrence = e.target.value as RecurrenceType;
+          const newRecurrence = e.target.value as ExtendedRecurrenceType;
           // Check if the new recurrence is eligible for payment plans
           const newIsEligible = isEligibleForPaymentPlan(newRecurrence, payCycle.frequency);
           
@@ -262,7 +299,54 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
         <option value="monthly">Monthly</option>
         <option value="quarterly">Quarterly</option>
         <option value="yearly">Yearly</option>
+        <option value="custom">Custom</option>
       </Select>
+
+      {/* Custom Recurrence Options */}
+      {formData.recurrence === 'custom' && (
+        <div className="bg-gray-50 p-4 rounded-md space-y-3">
+          <div className="flex items-center space-x-2">
+            <div className="w-1/3">
+              <label htmlFor="recurrenceInterval" className="block text-sm font-medium text-gray-700 mb-1">
+                Every
+              </label>
+              <input
+                type="number"
+                id="recurrenceInterval"
+                value={formData.recurrenceInterval}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  recurrenceInterval: parseInt(e.target.value) || 1 
+                })}
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+                min="1"
+                required
+              />
+            </div>
+            <div className="w-2/3">
+              <Select
+                id="recurrenceUnit"
+                label="Unit"
+                value={formData.recurrenceUnit}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  recurrenceUnit: e.target.value as 'day' | 'week' | 'month' | 'year'
+                })}
+                required
+              >
+                <option value="day">Day(s)</option>
+                <option value="week">Week(s)</option>
+                <option value="month">Month(s)</option>
+                <option value="year">Year(s)</option>
+              </Select>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600">
+            This will repeat every {formData.recurrenceInterval} {formData.recurrenceUnit}
+            {formData.recurrenceInterval > 1 ? 's' : ''} starting from the due date.
+          </p>
+        </div>
+      )}
 
       <Select
         id="accountId"
