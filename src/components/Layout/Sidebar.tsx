@@ -4,7 +4,8 @@ import {
   PiggyBank, 
   CreditCard,
   ArrowDownUp,
-  Calendar
+  Calendar,
+  Settings
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -71,6 +72,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
       <aside className={`${sidebarClasses} transform transition duration-200 ease-in-out fixed z-30 inset-y-0 left-0 w-64 bg-gray-50 border-r border-gray-200 lg:relative lg:z-0 flex flex-col`}>
         <div className="overflow-y-auto flex-grow">
           <div className="pt-6 pb-4 px-4">
+            {/* Pay Period Widget */}
+            <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 mb-4">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-gray-500">Pay Period</p>
+                  <span className="text-sm text-gray-900">
+                    {formatDate(lastPayDate.toISOString()).slice(0, 5)} - {formatDate(nextPayDate.toISOString()).slice(0, 5)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-gray-500">Next Payday</p>
+                  <span className="text-sm text-gray-900">
+                    {formatDate(nextPayDate.toISOString())}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
               <div className="space-y-3">
                 <div>
@@ -81,36 +100,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                 </div>
                 
                 <div className="pt-2 border-t border-gray-100">
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-gray-500">Pay Period</p>
-                    <span className="flex items-center text-xs text-gray-400">
-                      <Calendar size={12} className="mr-1" />
-                      {formatDate(nextPayDate.toISOString()).slice(0, 5)}
-                    </span>
-                  </div>
                   <div className="flex justify-between items-baseline">
-                    <p className="text-lg font-semibold text-gray-900">
-                      Required
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Until payday
-                    </p>
+                    <p className="text-sm text-gray-500">Required</p>
                   </div>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-xl font-bold text-gray-900">
                     {formatCurrency(requiredForPayPeriod)}
                   </p>
                 </div>
                 
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm text-gray-500">Allocated</p>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-xl font-bold text-gray-900">
                     {formatCurrency(totalAllocated)}
                   </p>
                 </div>
                 
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm text-gray-500">Remaining</p>
-                  <p className={`text-lg font-semibold ${
+                  <p className={`text-xl font-bold ${
                     remainingForPayPeriod >= 0 ? 'text-emerald-600' : 'text-red-600'
                   }`}>
                     {formatCurrency(remainingForPayPeriod)}
@@ -142,10 +149,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
         </div>
         
         <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center">
+          <div className="flex items-center justify-between">
             <div className="text-xs text-gray-500">
               &copy; {new Date().getFullYear()} FlowFund
             </div>
+            <NavLink
+              to="/settings"
+              onClick={() => closeSidebar()}
+              className={({ isActive }) => 
+                `flex items-center text-gray-500 hover:text-gray-700 transition-colors ${
+                  isActive ? 'text-indigo-600' : ''
+                }`
+              }
+            >
+              <Settings size={16} className="mr-1" />
+              <span className="text-sm">Settings</span>
+            </NavLink>
           </div>
         </div>
       </aside>

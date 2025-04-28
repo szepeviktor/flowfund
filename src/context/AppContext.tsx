@@ -15,6 +15,7 @@ interface AppContextType {
   fundSources: FundSource[];
   allocations: Allocation[];
   payCycle: PayCycle;
+  currency: string;
   
   // Data manipulation functions
   addAccount: (account: Omit<Account, 'id'>) => void;
@@ -32,6 +33,7 @@ interface AppContextType {
   resetFundSources: () => string;
   updateAllocations: (allocations: Allocation[]) => void;
   updatePayCycle: (payCycle: PayCycle) => void;
+  updateCurrency: (currency: string) => void;
   
   // Derived data
   totalAllocated: number;
@@ -117,6 +119,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       frequency: 'monthly'
     })
   );
+  
+  const [currency, setCurrency] = useState<string>(() => {
+    const saved = localStorage.getItem('currency');
+    return saved || 'USD';
+  });
   
   // Calculated total funds from all sources
   const totalFunds = fundSources.reduce((sum, source) => sum + source.amount, 0);
@@ -396,6 +403,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return date >= lastPayDate && date < nextPayDate;
   };
   
+  const updateCurrency = (newCurrency: string) => {
+    setCurrency(newCurrency);
+    localStorage.setItem('currency', newCurrency);
+  };
+  
   return (
     <AppContext.Provider value={{
       // Data
@@ -405,6 +417,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fundSources,
       allocations,
       payCycle,
+      currency,
       
       // Functions
       addAccount,
@@ -422,6 +435,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       resetFundSources,
       updateAllocations,
       updatePayCycle,
+      updateCurrency,
       
       // Derived data
       totalAllocated,

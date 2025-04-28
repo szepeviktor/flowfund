@@ -5,6 +5,7 @@ import MainLayout from './components/Layout/MainLayout';
 import AccountsPage from './pages/AccountsPage';
 import OutgoingsPage from './pages/OutgoingsPage';
 import AllocationPage from './pages/AllocationPage';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
             <Route index element={<AllocationPage />} />
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="outgoings" element={<OutgoingsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
