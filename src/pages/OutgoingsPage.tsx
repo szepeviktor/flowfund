@@ -6,7 +6,7 @@ import Modal from '../components/UI/Modal';
 import OutgoingForm from '../components/Forms/OutgoingForm';
 import Badge from '../components/UI/Badge';
 import Select from '../components/UI/Select';
-import { Calendar, Plus, Trash2, Settings, List, Clock } from 'lucide-react';
+import { Calendar, Plus, Trash2, Settings, List, Clock, ListFilter } from 'lucide-react';
 import { formatCurrency, formatDate, getRelativeDateDescription, getNextOccurrence } from '../utils/formatters';
 import { Outgoing, RecurrenceType, PayCycle } from '../types';
 
@@ -352,10 +352,6 @@ const OutgoingsPage: React.FC = () => {
     updatePayCycle(newPayCycle);
   };
 
-  const handleViewChange = (mode: ViewMode) => {
-    setViewMode(mode);
-  };
-
   return (
     <div className="max-w-5xl mx-auto pb-8">
       <div className="flex justify-between items-center mb-6">
@@ -364,14 +360,32 @@ const OutgoingsPage: React.FC = () => {
           <p className="text-gray-500 mt-1">Manage your regular payments and bills</p>
         </div>
         <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            icon={<Calendar size={16} />}
-            onClick={() => setViewMode(viewMode === 'list' ? 'timeline' : 'list')}
-          >
-            {viewMode === 'list' ? 'Timeline View' : 'List View'}
-          </Button>
+          <div className="border border-gray-200 rounded-md flex divide-x divide-gray-200 overflow-hidden mr-2">
+            <button
+              className={`p-2 ${
+                viewMode === 'timeline' 
+                  ? 'bg-indigo-50 text-indigo-600' 
+                  : 'bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              } transition-colors`}
+              onClick={() => setViewMode('timeline')}
+              title="Timeline View"
+              aria-label="Switch to timeline view"
+            >
+              <Calendar size={18} />
+            </button>
+            <button
+              className={`p-2 ${
+                viewMode === 'list' 
+                  ? 'bg-indigo-50 text-indigo-600' 
+                  : 'bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              } transition-colors`}
+              onClick={() => setViewMode('list')}
+              title="List View"
+              aria-label="Switch to list view"
+            >
+              <ListFilter size={18} />
+            </button>
+          </div>
           <Button
             variant="primary"
             size="sm"
