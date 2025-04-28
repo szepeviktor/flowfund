@@ -20,30 +20,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
     totalFunds, 
     outgoings,
     totalAllocated,
-    getNextPayDate,
-    getLastPayDate,
+    getPayPeriod,
     payCycle
   } = useAppContext();
   
-  const [nextPayDate, setNextPayDate] = useState<Date>(getNextPayDate());
-  const [lastPayDate, setLastPayDate] = useState<Date>(getLastPayDate());
-
-  // Update pay dates when they change
-  useEffect(() => {
-    setNextPayDate(getNextPayDate());
-    setLastPayDate(getLastPayDate());
-  }, [getNextPayDate, getLastPayDate]);
+  const { startDate, endDate } = useMemo(() => getPayPeriod(), [getPayPeriod, payCycle]);
 
   // Calculate required funds for the current pay period
   const requiredForPayPeriod = useMemo(() => {
     return outgoings.reduce((total, outgoing) => {
       const nextDate = new Date(outgoing.dueDate);
-      if (nextDate >= lastPayDate && nextDate < nextPayDate) {
+      if (nextDate >= startDate && nextDate < endDate) {
         return total + outgoing.amount;
       }
       return total;
     }, 0);
-  }, [outgoings, lastPayDate, nextPayDate]);
+  }, [outgoings, startDate, endDate]);
 
   // Calculate remaining funds for the current pay period
   const remainingForPayPeriod = totalFunds - requiredForPayPeriod;
@@ -78,13 +70,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-500">Pay Period</p>
                   <span className="text-sm text-gray-900">
-                    {formatDate(lastPayDate.toISOString()).slice(0, 5)} - {formatDate(nextPayDate.toISOString()).slice(0, 5)}
+                    {startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-500">Next Payday</p>
                   <span className="text-sm text-gray-900">
-                    {formatDate(nextPayDate.toISOString())}
+                    {formatDate(endDate.toISOString())}
                   </span>
                 </div>
               </div>

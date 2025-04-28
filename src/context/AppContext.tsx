@@ -46,8 +46,7 @@ interface AppContextType {
   calculateTotalUpcomingOutgoings: () => number;
   
   // Pay cycle utilities
-  getNextPayDate: () => Date;
-  getLastPayDate: () => Date;
+  getPayPeriod: () => { startDate: Date; endDate: Date };
   isWithinPayCycle: (date: Date) => boolean;
 }
 
@@ -288,8 +287,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPayCycle(newPayCycle);
   };
   
-  // Get the next pay date based on the pay cycle settings
-  const getNextPayDate = (): Date => {
+  // Get the pay period dates (start and end)
+  const getPayPeriod = (): { startDate: Date; endDate: Date } => {
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
@@ -298,20 +297,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Create a date for this month's payday
       const thisMonthPayday = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
       
-      // If payday is in the future or today, return it
+      // If payday is in the future or today, return last month's payday to this month's payday
       if (thisMonthPayday > today) {
-        return thisMonthPayday;
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        const startDate = new Date(lastYear, lastMonth, payCycle.dayOfMonth);
+        const endDate = new Date(thisMonthPayday);
+        endDate.setDate(endDate.getDate() - 1); // End on the day before next payday
+        return { startDate, endDate };
       }
       
-      // Otherwise, return next month's payday
-      return new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
+      // Otherwise, return this month's payday to next month's payday
+      const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+      const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+      const startDate = thisMonthPayday;
+      const endDate = new Date(nextYear, nextMonth, payCycle.dayOfMonth);
+      endDate.setDate(endDate.getDate() - 1); // End on the day before next payday
+      return { startDate, endDate };
     } 
     else if (payCycle.frequency === 'biweekly' || payCycle.frequency === 'weekly') {
       // For these frequencies, we need the last pay date to calculate the next one
       if (!payCycle.lastPayDate) {
         // If no last pay date is set, use today as the base and calculate forward
         const defaultPayDate = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
-        return defaultPayDate > today ? defaultPayDate : new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
+        const startDate = defaultPayDate > today ? 
+          new Date(currentYear, currentMonth - 1, payCycle.dayOfMonth) : 
+          defaultPayDate;
+        const endDate = defaultPayDate > today ? 
+          defaultPayDate : 
+          new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
+        endDate.setDate(endDate.getDate() - 1); // End on the day before next payday
+        return { startDate, endDate };
       }
       
       const lastPay = new Date(payCycle.lastPayDate);
@@ -333,74 +349,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
       
-      return nextPay;
+      const endDate = new Date(nextPay);
+      endDate.setDate(endDate.getDate() - 1); // End on the day before next payday
+      
+      return {
+        startDate: lastPay,
+        endDate
+      };
     }
     
     // Fallback in case of unexpected frequency
-    return new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
-  };
-  
-  // Get the last pay date based on the pay cycle settings
-  const getLastPayDate = (): Date => {
-    const today = new Date();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
-    
-    if (payCycle.frequency === 'monthly') {
-      // Create a date for this month's payday
-      const thisMonthPayday = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
-      
-      // If payday is in the future or today, return last month's payday
-      if (thisMonthPayday > today) {
-        return new Date(currentYear, currentMonth - 1, payCycle.dayOfMonth);
-      }
-      
-      // Otherwise, return this month's payday since it's in the past
-      return thisMonthPayday;
-    } 
-    else if (payCycle.frequency === 'biweekly' || payCycle.frequency === 'weekly') {
-      // For these frequencies, we need the last pay date from our settings
-      if (payCycle.lastPayDate) {
-        const lastPay = new Date(payCycle.lastPayDate);
-        let nextPay = new Date(lastPay);
-        
-        // Calculate the most recent pay date by starting from the last known
-        // pay date and adding periods until we're past today, then step back once
-        while (true) {
-          const prevPay = new Date(nextPay);
-          
-          if (payCycle.frequency === 'biweekly') {
-            nextPay.setDate(nextPay.getDate() + 14);
-          } else {
-            nextPay.setDate(nextPay.getDate() + 7);
-          }
-          
-          if (nextPay > today) {
-            return prevPay;
-          }
-        }
-      }
-      
-      // If no last pay date is set, default to the previous occurrence of the day of month
-      const defaultPayDate = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
-      return defaultPayDate > today 
-        ? new Date(currentYear, currentMonth - 1, payCycle.dayOfMonth)
-        : defaultPayDate;
-    }
-    
-    // Fallback
-    return new Date(currentYear, currentMonth, payCycle.dayOfMonth);
+    const startDate = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
+    const endDate = new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
+    endDate.setDate(endDate.getDate() - 1); // End on the day before next payday
+    return { startDate, endDate };
   };
   
   // Check if a date falls within the current pay cycle
   const isWithinPayCycle = (date: Date): boolean => {
-    const lastPayDate = getLastPayDate();
-    const nextPayDate = getNextPayDate();
-    
-    // Check if the date is after the last payday and before the next payday
-    // Note: We use >= for lastPayDate to include the start of the period
-    // and < for nextPayDate to exclude the end of the period
-    return date >= lastPayDate && date < nextPayDate;
+    const { startDate, endDate } = getPayPeriod();
+    return date >= startDate && date < endDate;
   };
   
   const updateCurrency = (newCurrency: string) => {
@@ -448,8 +416,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       calculateTotalUpcomingOutgoings,
       
       // Pay cycle utilities
-      getNextPayDate,
-      getLastPayDate,
+      getPayPeriod,
       isWithinPayCycle,
     }}>
       {children}

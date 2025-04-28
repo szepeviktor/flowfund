@@ -54,8 +54,7 @@ const AllocationPage: React.FC = () => {
     remainingToAllocate,
     updateAllocations,
     resetFundSources,
-    getNextPayDate,
-    getLastPayDate
+    getPayPeriod
   } = useAppContext();
   
   const { updateFundsAndAllocations, addFundSource, updateFundSource, deleteFundSource } = useAllocation();
@@ -63,18 +62,11 @@ const AllocationPage: React.FC = () => {
   const [newSourceIds, setNewSourceIds] = useState<string[]>([]);
   const latestSourceRef = useRef<string | null>(null);
   const [isAllocating, setIsAllocating] = useState(false);
-  const [nextPayDate, setNextPayDate] = useState<Date>(getNextPayDate());
-  const [lastPayDate, setLastPayDate] = useState<Date>(getLastPayDate());
-  
-  // Use state with initial values from localStorage
-  const [manualAllocations, setManualAllocations] = useState<{[id: string]: number}>(getInitialManualAllocations());
   const [isDistributingExcess, setIsDistributingExcess] = useState<boolean>(getInitialDistributingState());
-
-  // Update pay dates when they change
-  useEffect(() => {
-    setNextPayDate(getNextPayDate());
-    setLastPayDate(getLastPayDate());
-  }, [getNextPayDate, getLastPayDate]);
+  const [manualAllocations, setManualAllocations] = useState<{[id: string]: number}>(getInitialManualAllocations());
+  
+  // Get pay period dates
+  const { startDate, endDate } = useMemo(() => getPayPeriod(), [getPayPeriod]);
 
   // Calculate the unallocated amount directly (funds that haven't been allocated)
   const unallocatedFunds = totalFunds - totalAllocated;
@@ -89,12 +81,12 @@ const AllocationPage: React.FC = () => {
   const totalRequiredForPayPeriod = useMemo(() => {
     return outgoings.reduce((total, outgoing) => {
       const nextDate = new Date(outgoing.dueDate);
-      if (nextDate >= lastPayDate && nextDate < nextPayDate) {
+      if (nextDate >= startDate && nextDate < endDate) {
         return total + outgoing.amount;
       }
       return total;
     }, 0);
-  }, [outgoings, lastPayDate, nextPayDate]);
+  }, [outgoings, startDate, endDate]);
 
   // Calculate remaining funds for the current pay period
   const remainingForPayPeriod = totalFunds - totalRequiredForPayPeriod;
@@ -107,7 +99,7 @@ const AllocationPage: React.FC = () => {
     const accountOutgoings = getOutgoingsForAccount(accountId);
     return accountOutgoings.filter(outgoing => {
       const nextDate = new Date(outgoing.dueDate);
-      return nextDate >= lastPayDate && nextDate < nextPayDate;
+      return nextDate >= startDate && nextDate < endDate;
     });
   };
 

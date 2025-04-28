@@ -154,8 +154,7 @@ const OutgoingsPage: React.FC = () => {
     deleteOutgoing, 
     payCycle, 
     updatePayCycle,
-    getNextPayDate,
-    getLastPayDate,
+    getPayPeriod,
     accounts
   } = useAppContext();
   
@@ -164,64 +163,10 @@ const OutgoingsPage: React.FC = () => {
   const [editingOutgoing, setEditingOutgoing] = useState<Outgoing | undefined>(undefined);
   const [deletingOutgoing, setDeletingOutgoing] = useState<typeof outgoings[0] | undefined>();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [nextPayDate, setNextPayDate] = useState<Date>(getNextPayDate());
-  const [lastPayDate, setLastPayDate] = useState<Date>(getLastPayDate());
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
 
-  // Update pay dates when payCycle changes
-  useEffect(() => {
-    setNextPayDate(getNextPayDate());
-    setLastPayDate(getLastPayDate());
-  }, [payCycle, getNextPayDate, getLastPayDate]);
-
-  const handleEdit = (outgoing: typeof outgoings[0]) => {
-    // Find the original outgoing (not the repeated instance)
-    const originalOutgoing = outgoings.find(o => o.id === outgoing.id);
-    if (originalOutgoing) {
-      setEditingOutgoing(originalOutgoing);
-      setIsModalOpen(true);
-    }
-  };
-
-  const handleClose = () => {
-    setEditingOutgoing(undefined);
-    setIsModalOpen(false);
-  };
-
-  const handleDeleteClick = (e: React.MouseEvent, outgoing: typeof outgoings[0]) => {
-    e.stopPropagation(); // Prevent card click from triggering
-    setDeletingOutgoing(outgoing);
-    setIsDeleteModalOpen(true);
-  };
-
-  const handleDeleteConfirm = () => {
-    if (deletingOutgoing) {
-      deleteOutgoing(deletingOutgoing.id);
-      setIsDeleteModalOpen(false);
-      setDeletingOutgoing(undefined);
-    }
-  };
-
-  const handleDeleteCancel = () => {
-    setIsDeleteModalOpen(false);
-    setDeletingOutgoing(undefined);
-  };
-
-  const handlePayCycleOpen = () => {
-    setIsPayCycleModalOpen(true);
-  };
-
-  const handlePayCycleClose = () => {
-    setIsPayCycleModalOpen(false);
-  };
-
-  const handlePayCycleSave = (newPayCycle: PayCycle) => {
-    updatePayCycle(newPayCycle);
-  };
-
-  const handleViewChange = (mode: ViewMode) => {
-    setViewMode(mode);
-  };
+  // Get pay period dates
+  const { startDate, endDate } = useMemo(() => getPayPeriod(), [getPayPeriod]);
 
   // Helper to get all occurrences of an outgoing within the pay period
   const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing): OutgoingWithDate[] => {
@@ -233,7 +178,7 @@ const OutgoingsPage: React.FC = () => {
       const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
       
       // Only include if it falls within the pay period or is the next upcoming after the period
-      if (nextDate >= lastPayDate) {
+      if (nextDate >= startDate) {
         return [{
           ...outgoing,
           specificDate: nextDate
@@ -246,7 +191,7 @@ const OutgoingsPage: React.FC = () => {
     let currentDate = getNextOccurrence(baseDate, outgoing.recurrence);
     
     // If the first occurrence is already beyond the next pay date, show it anyway
-    if (currentDate > nextPayDate) {
+    if (currentDate > endDate) {
       return [{
         ...outgoing,
         specificDate: currentDate
@@ -254,7 +199,7 @@ const OutgoingsPage: React.FC = () => {
     }
     
     // Find the first occurrence that falls after the last pay date
-    while (currentDate < lastPayDate) {
+    while (currentDate < startDate) {
       // Move to next occurrence based on recurrence type
       if (outgoing.recurrence === 'weekly') {
         currentDate.setDate(currentDate.getDate() + 7);
@@ -273,7 +218,7 @@ const OutgoingsPage: React.FC = () => {
     // For weekly/biweekly, add multiple occurrences; for others, just add one
     let shouldAddMore = true;
     while (shouldAddMore) {
-      // Add the current occurrence since it's after lastPayDate
+      // Add the current occurrence since it's after startDate
       occurrences.push({
         ...outgoing,
         specificDate: new Date(currentDate.getTime()),
@@ -291,7 +236,7 @@ const OutgoingsPage: React.FC = () => {
         }
         
         // Add the occurrence if it's within the pay period
-        if (nextDate <= nextPayDate) {
+        if (nextDate <= endDate) {
           currentDate = nextDate;
         } else {
           shouldAddMore = false;
@@ -313,7 +258,7 @@ const OutgoingsPage: React.FC = () => {
   // Filter occurrences to only include those within the current pay period
   const payPeriodOccurrences = allOutgoingOccurrences.filter(outgoing => {
     const date = outgoing.specificDate;
-    return date >= lastPayDate && date < nextPayDate;
+    return date >= startDate && date < endDate;
   });
 
   // Sort by date
@@ -370,6 +315,55 @@ const OutgoingsPage: React.FC = () => {
     return outgoingsByAccount[accountId]?.reduce((sum, outgoing) => sum + outgoing.amount, 0) || 0;
   };
 
+  const handleEdit = (outgoing: typeof outgoings[0]) => {
+    // Find the original outgoing (not the repeated instance)
+    const originalOutgoing = outgoings.find(o => o.id === outgoing.id);
+    if (originalOutgoing) {
+      setEditingOutgoing(originalOutgoing);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleClose = () => {
+    setEditingOutgoing(undefined);
+    setIsModalOpen(false);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, outgoing: typeof outgoings[0]) => {
+    e.stopPropagation(); // Prevent card click from triggering
+    setDeletingOutgoing(outgoing);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deletingOutgoing) {
+      deleteOutgoing(deletingOutgoing.id);
+      setIsDeleteModalOpen(false);
+      setDeletingOutgoing(undefined);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsDeleteModalOpen(false);
+    setDeletingOutgoing(undefined);
+  };
+
+  const handlePayCycleOpen = () => {
+    setIsPayCycleModalOpen(true);
+  };
+
+  const handlePayCycleClose = () => {
+    setIsPayCycleModalOpen(false);
+  };
+
+  const handlePayCycleSave = (newPayCycle: PayCycle) => {
+    updatePayCycle(newPayCycle);
+  };
+
+  const handleViewChange = (mode: ViewMode) => {
+    setViewMode(mode);
+  };
+
   return (
     <div className="max-w-5xl mx-auto pb-8">
       <div className="flex justify-between items-center mb-6">
@@ -403,7 +397,6 @@ const OutgoingsPage: React.FC = () => {
       {/* Timeline View */}
       {viewMode === 'timeline' && (
         <>
-
           <div className="space-y-6 mb-8">
             {sortedHeadings.map(heading => {
               const outgoings = groupedOutgoings[heading];
