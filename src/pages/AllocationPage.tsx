@@ -486,11 +486,11 @@ const AllocationPage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto pb-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Allocate Funds</h1>
-        <p className="text-gray-500 mt-2">
-          Add your available funds and we'll allocate them to your accounts
-        </p>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Allocate Funds</h1>
+          <p className="text-gray-500 mt-1">Add your available funds and we'll allocate them to your accounts</p>
+        </div>
       </div>
 
       <Card className="mb-8">

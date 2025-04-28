@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
@@ -161,12 +161,12 @@ const OutgoingsPage: React.FC = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPayCycleModalOpen, setIsPayCycleModalOpen] = useState(false);
-  const [editingOutgoing, setEditingOutgoing] = useState<typeof outgoings[0] | undefined>();
+  const [editingOutgoing, setEditingOutgoing] = useState<Outgoing | undefined>(undefined);
   const [deletingOutgoing, setDeletingOutgoing] = useState<typeof outgoings[0] | undefined>();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [nextPayDate, setNextPayDate] = useState<Date>(getNextPayDate());
   const [lastPayDate, setLastPayDate] = useState<Date>(getLastPayDate());
-  const [viewMode, setViewMode] = useState<ViewMode>('timeline');
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
 
   // Update pay dates when payCycle changes
   useEffect(() => {
@@ -372,72 +372,37 @@ const OutgoingsPage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto pb-8">
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Outgoings</h1>
-          <p className="text-gray-500 mt-1">Manage your upcoming payments</p>
+          <p className="text-gray-500 mt-1">Manage your regular payments and bills</p>
         </div>
         <div className="flex space-x-2">
-          <Button 
-            icon={<Plus size={18} />}
-            onClick={() => setIsModalOpen(true)}
-          >
-            New Outgoing
-          </Button>
-          <Button 
+          <Button
             variant="outline"
-            icon={<Settings size={18} />}
-            onClick={handlePayCycleOpen}
+            size="sm"
+            icon={<Calendar size={16} />}
+            onClick={() => setViewMode(viewMode === 'list' ? 'timeline' : 'list')}
           >
-            Pay Cycle
+            {viewMode === 'list' ? 'Timeline View' : 'List View'}
           </Button>
-        </div>
-      </div>
-
-      <div className="flex justify-center mb-6">
-        <div className="inline-flex rounded-md shadow-sm" role="group">
-          <button
-            type="button"
-            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-l-lg ${
-              viewMode === 'list' 
-                ? 'bg-indigo-600 text-white' 
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-            onClick={() => handleViewChange('list')}
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Plus size={16} />}
+            onClick={() => {
+              setEditingOutgoing(undefined);
+              setIsModalOpen(true);
+            }}
           >
-            <List size={16} className="mr-2" />
-            List View
-          </button>
-          <button
-            type="button"
-            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-r-lg ${
-              viewMode === 'timeline' 
-                ? 'bg-indigo-600 text-white' 
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-            onClick={() => handleViewChange('timeline')}
-          >
-            <Clock size={16} className="mr-2" />
-            Timeline View
-          </button>
+            Add Outgoing
+          </Button>
         </div>
       </div>
 
       {/* Timeline View */}
       {viewMode === 'timeline' && (
         <>
-          <div className="bg-gray-50 py-4 rounded-lg mb-6 flex justify-between items-center">
-            <div>
-              <p className="text-sm text-gray-500">Current Pay Period:</p>
-              <p className="text-md font-medium">
-                {formatDate(lastPayDate.toISOString())} to {formatDate(new Date(nextPayDate.getTime() - 24 * 60 * 60 * 1000).toISOString())}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Next Payday:</p>
-              <p className="text-md font-medium">{formatDate(nextPayDate.toISOString())}</p>
-            </div>
-          </div>
 
           <div className="space-y-6 mb-8">
             {sortedHeadings.map(heading => {
@@ -509,7 +474,7 @@ const OutgoingsPage: React.FC = () => {
             {Object.keys(groupedOutgoings).length === 0 && (
               <div className="text-center py-12 bg-gray-50 rounded-lg">
                 <p className="text-gray-500">No outgoings found in current pay period</p>
-                <p className="text-sm text-gray-400 mt-1">Click "New Outgoing" to add one</p>
+                <p className="text-sm text-gray-400 mt-1">Click "Add Outgoing" to add one</p>
               </div>
             )}
           </div>
@@ -579,7 +544,7 @@ const OutgoingsPage: React.FC = () => {
           {outgoings.length === 0 && (
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <p className="text-gray-500">No outgoings found</p>
-              <p className="text-sm text-gray-400 mt-1">Click "New Outgoing" to add one</p>
+              <p className="text-sm text-gray-400 mt-1">Click "Add Outgoing" to add one</p>
             </div>
           )}
         </div>
