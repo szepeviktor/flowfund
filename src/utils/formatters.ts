@@ -15,6 +15,35 @@ export const formatCurrency = (amount: number, currencyCode: string = 'USD'): st
 };
 
 /**
+ * Get currency symbol from currency code
+ * @param currencyCode The ISO currency code (e.g., 'USD', 'EUR')
+ */
+export const getCurrencySymbol = (currencyCode: string): string => {
+  try {
+    // Use the Intl API to get the currency symbol
+    return new Intl.NumberFormat('en', { 
+      style: 'currency', 
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    })
+      .format(0)
+      .replace(/[0-9]/g, '')
+      .trim();
+  } catch (error) {
+    // Fallback to common symbols
+    const symbols: Record<string, string> = {
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'CNY': '¥'
+    };
+    return symbols[currencyCode] || currencyCode;
+  }
+};
+
+/**
  * Format a date in a user-friendly way
  */
 export const formatDate = (dateString: string): string => {

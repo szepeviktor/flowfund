@@ -4,6 +4,7 @@ import Button from '../UI/Button';
 import Select from '../UI/Select';
 import Input from '../UI/Input';
 import { RecurrenceType, PaymentPlan } from '../../types';
+import { getCurrencySymbol } from '../../utils/formatters';
 
 // We need to extend the RecurrenceType to include 'custom'
 // Since we can't modify the imported type directly, we'll create a local extended type
@@ -87,32 +88,6 @@ interface OutgoingFormProps {
 
 const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => {
   const { accounts, addOutgoing, updateOutgoing, payCycle, currency } = useAppContext();
-  
-  // Helper to get the currency symbol based on currency code
-  const getCurrencySymbol = (currencyCode: string): string => {
-    try {
-      // Use the Intl API to get the currency symbol
-      return new Intl.NumberFormat('en', { 
-        style: 'currency', 
-        currency: currencyCode,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      })
-        .format(0)
-        .replace(/[0-9]/g, '')
-        .trim();
-    } catch (error) {
-      // Fallback to common symbols
-      const symbols: Record<string, string> = {
-        'USD': '$',
-        'EUR': '€',
-        'GBP': '£',
-        'JPY': '¥',
-        'CNY': '¥'
-      };
-      return symbols[currencyCode] || currencyCode;
-    }
-  };
   
   // Get the currency symbol
   const currencySymbol = getCurrencySymbol(currency);

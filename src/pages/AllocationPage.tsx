@@ -3,10 +3,9 @@ import { useAppContext } from '../context/AppContext';
 import { useAllocation } from '../hooks/useAllocation';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol, getNextOccurrence } from '../utils/formatters';
 import { RefreshCw, Plus, Trash2, RefreshCcw, SlidersHorizontal } from 'lucide-react';
 import { FundSource, Outgoing } from '../types';
-import { getNextOccurrence } from '../utils/formatters';
 
 // Use a namespace for localStorage keys to avoid collisions
 const LS_PREFIX = 'flowfund_';
@@ -900,7 +899,7 @@ const AllocationPage: React.FC = () => {
             {fundSources.map((source) => (
               <div key={source.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <div className="flex items-center flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{getCurrencySymbol(currency)}</span>
                   <input
                     type="text" 
                     inputMode="decimal"
