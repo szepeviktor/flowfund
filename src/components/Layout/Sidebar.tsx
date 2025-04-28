@@ -282,18 +282,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
           <div className="pt-6 pb-4 px-4">
             {/* Pay Period Widget */}
             <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 mb-4">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
+              <div className="space-y-3">
+                <div>
                   <p className="text-sm text-gray-500">Pay Period</p>
-                  <span className="text-sm text-gray-900">
+                  <p className="text-sm font-semibold text-gray-900">
                     {startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </span>
+                  </p>
                 </div>
-                <div className="flex justify-between items-center">
+                
+                <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm text-gray-500">Next Payday</p>
-                  <span className="text-sm text-gray-900">
+                  <p className="text-sm font-semibold text-gray-900">
                     {formatDate(nextPayDate.toISOString())}
-                  </span>
+                  </p>
                 </div>
               </div>
             </div>
