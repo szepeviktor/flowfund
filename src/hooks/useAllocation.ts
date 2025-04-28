@@ -79,11 +79,74 @@ export const useAllocation = () => {
    * Helper function to get all occurrences of an outgoing within the pay period
    */
   const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing, startDate: Date, endDate: Date): Outgoing[] => {
+    // Check if this outgoing has a payment plan
+    if (outgoing.paymentPlan?.enabled) {
+      const occurrences: Outgoing[] = [];
+      const planStartDate = new Date(outgoing.paymentPlan.startDate);
+      const dueDate = new Date(outgoing.dueDate);
+      
+      // Ensure dates are valid
+      if (isNaN(planStartDate.getTime()) || isNaN(dueDate.getTime()) || planStartDate >= dueDate) {
+        return [];
+      }
+      
+      // Calculate installment amount
+      let currentDate = new Date(planStartDate);
+      let totalInstallments = 0;
+      
+      // First count total installments
+      while (currentDate < dueDate) {
+        totalInstallments++;
+        if (outgoing.paymentPlan.frequency === 'weekly') {
+          currentDate.setDate(currentDate.getDate() + 7);
+        } else if (outgoing.paymentPlan.frequency === 'biweekly') {
+          currentDate.setDate(currentDate.getDate() + 14);
+        } else if (outgoing.paymentPlan.frequency === 'monthly') {
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+      }
+      
+      // Calculate installment amount
+      const installmentAmount = outgoing.paymentPlan.installmentAmount !== undefined ? 
+        outgoing.paymentPlan.installmentAmount : 
+        (totalInstallments > 0 ? Math.ceil((outgoing.amount / totalInstallments) * 100) / 100 : outgoing.amount);
+      
+      // Reset currentDate to re-iterate and find installments within the pay period
+      currentDate = new Date(planStartDate);
+      let installmentNumber = 1;
+      
+      // Add installments within the pay period
+      while (currentDate < dueDate) {
+        if (currentDate >= startDate && currentDate <= endDate) {
+          // Create a new outgoing instance for this installment
+          occurrences.push({
+            ...outgoing,
+            id: `${outgoing.id}-installment-${installmentNumber}`,
+            amount: installmentAmount,
+            name: `${outgoing.name} (Installment ${installmentNumber}/${totalInstallments})`
+          });
+        }
+        
+        // Move to next date based on frequency
+        if (outgoing.paymentPlan.frequency === 'weekly') {
+          currentDate.setDate(currentDate.getDate() + 7);
+        } else if (outgoing.paymentPlan.frequency === 'biweekly') {
+          currentDate.setDate(currentDate.getDate() + 14);
+        } else if (outgoing.paymentPlan.frequency === 'monthly') {
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+        
+        installmentNumber++;
+      }
+      
+      return occurrences;
+    }
+
     const baseDate = new Date(outgoing.dueDate);
     const occurrences: Outgoing[] = [];
     
     // For non-repeating outgoings, just check if it's in this pay period
-    if (outgoing.recurrence === 'none') {
+    if (outgoing.recurrence === 'none' && !outgoing.isCustomRecurrence) {
       const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
       if (nextDate >= startDate && nextDate <= endDate) {
         return [outgoing];
@@ -92,12 +155,33 @@ export const useAllocation = () => {
     }
     
     // For all recurring payments, find occurrences within the pay period
-    let currentDate = getNextOccurrence(baseDate, outgoing.recurrence);
+    let currentDate = getNextOccurrence(
+      baseDate, 
+      outgoing.recurrence,
+      outgoing.isCustomRecurrence ? outgoing.recurrenceInterval : undefined,
+      outgoing.isCustomRecurrence ? outgoing.recurrenceUnit : undefined
+    );
     
-    // Find the first occurrence that falls after the last pay date
+    // If the first occurrence is already beyond the end date, return empty array
+    if (currentDate > endDate) {
+      return [];
+    }
+    
+    // Find the first occurrence that falls after the start date
     while (currentDate < startDate) {
       // Move to next occurrence based on recurrence type
-      if (outgoing.recurrence === 'weekly') {
+      if (outgoing.isCustomRecurrence && outgoing.recurrenceInterval && outgoing.recurrenceUnit) {
+        // Handle custom recurrence
+        if (outgoing.recurrenceUnit === 'day') {
+          currentDate.setDate(currentDate.getDate() + outgoing.recurrenceInterval);
+        } else if (outgoing.recurrenceUnit === 'week') {
+          currentDate.setDate(currentDate.getDate() + (7 * outgoing.recurrenceInterval));
+        } else if (outgoing.recurrenceUnit === 'month') {
+          currentDate.setMonth(currentDate.getMonth() + outgoing.recurrenceInterval);
+        } else if (outgoing.recurrenceUnit === 'year') {
+          currentDate.setFullYear(currentDate.getFullYear() + outgoing.recurrenceInterval);
+        }
+      } else if (outgoing.recurrence === 'weekly') {
         currentDate.setDate(currentDate.getDate() + 7);
       } else if (outgoing.recurrence === 'biweekly') {
         currentDate.setDate(currentDate.getDate() + 14);
@@ -107,6 +191,11 @@ export const useAllocation = () => {
         currentDate.setMonth(currentDate.getMonth() + 3);
       } else if (outgoing.recurrence === 'yearly') {
         currentDate.setFullYear(currentDate.getFullYear() + 1);
+      }
+      
+      // Safety check in case we've gone past the end date while finding the first occurrence
+      if (currentDate > endDate) {
+        return [];
       }
     }
     
@@ -119,7 +208,26 @@ export const useAllocation = () => {
       }
       
       // Determine if we should add more occurrences based on recurrence type
-      if (outgoing.recurrence === 'weekly' || outgoing.recurrence === 'biweekly') {
+      if (outgoing.isCustomRecurrence && outgoing.recurrenceInterval && outgoing.recurrenceUnit) {
+        // For custom recurrence, add more occurrences if they fit within pay period
+        const nextDate = new Date(currentDate);
+        
+        if (outgoing.recurrenceUnit === 'day') {
+          nextDate.setDate(nextDate.getDate() + outgoing.recurrenceInterval);
+        } else if (outgoing.recurrenceUnit === 'week') {
+          nextDate.setDate(nextDate.getDate() + (7 * outgoing.recurrenceInterval));
+        } else if (outgoing.recurrenceUnit === 'month') {
+          nextDate.setMonth(nextDate.getMonth() + outgoing.recurrenceInterval);
+        } else if (outgoing.recurrenceUnit === 'year') {
+          nextDate.setFullYear(nextDate.getFullYear() + outgoing.recurrenceInterval);
+        }
+        
+        if (nextDate <= endDate) {
+          currentDate = nextDate;
+        } else {
+          shouldAddMore = false;
+        }
+      } else if (outgoing.recurrence === 'weekly' || outgoing.recurrence === 'biweekly') {
         // Move to next occurrence
         const nextDate = new Date(currentDate);
         if (outgoing.recurrence === 'weekly') {
