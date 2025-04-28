@@ -53,7 +53,9 @@ const AllocationPage: React.FC = () => {
     totalAllocated,
     remainingToAllocate,
     updateAllocations,
-    resetFundSources
+    resetFundSources,
+    getNextPayDate,
+    getLastPayDate
   } = useAppContext();
   
   const { updateFundsAndAllocations, addFundSource, updateFundSource, deleteFundSource } = useAllocation();
@@ -61,10 +63,18 @@ const AllocationPage: React.FC = () => {
   const [newSourceIds, setNewSourceIds] = useState<string[]>([]);
   const latestSourceRef = useRef<string | null>(null);
   const [isAllocating, setIsAllocating] = useState(false);
+  const [nextPayDate, setNextPayDate] = useState<Date>(getNextPayDate());
+  const [lastPayDate, setLastPayDate] = useState<Date>(getLastPayDate());
   
   // Use state with initial values from localStorage
   const [manualAllocations, setManualAllocations] = useState<{[id: string]: number}>(getInitialManualAllocations());
   const [isDistributingExcess, setIsDistributingExcess] = useState<boolean>(getInitialDistributingState());
+
+  // Update pay dates when they change
+  useEffect(() => {
+    setNextPayDate(getNextPayDate());
+    setLastPayDate(getLastPayDate());
+  }, [getNextPayDate, getLastPayDate]);
 
   // Calculate the unallocated amount directly (funds that haven't been allocated)
   const unallocatedFunds = totalFunds - totalAllocated;
@@ -75,9 +85,32 @@ const AllocationPage: React.FC = () => {
     [manualAllocations]
   );
 
+  // Calculate total required for the current pay period
+  const totalRequiredForPayPeriod = useMemo(() => {
+    return outgoings.reduce((total, outgoing) => {
+      const nextDate = new Date(outgoing.dueDate);
+      if (nextDate >= lastPayDate && nextDate < nextPayDate) {
+        return total + outgoing.amount;
+      }
+      return total;
+    }, 0);
+  }, [outgoings, lastPayDate, nextPayDate]);
+
+  // Calculate remaining funds for the current pay period
+  const remainingForPayPeriod = totalFunds - totalRequiredForPayPeriod;
+
   // Calculate the remaining amount after both automatic and manual allocations
-  const remainingAfterManualAllocations = remainingToAllocate - totalManuallyAllocated;
-  
+  const remainingAfterManualAllocations = remainingForPayPeriod - totalManuallyAllocated;
+
+  // Get outgoings for the current pay period
+  const getOutgoingsForPayPeriod = (accountId: string) => {
+    const accountOutgoings = getOutgoingsForAccount(accountId);
+    return accountOutgoings.filter(outgoing => {
+      const nextDate = new Date(outgoing.dueDate);
+      return nextDate >= lastPayDate && nextDate < nextPayDate;
+    });
+  };
+
   // Function to save distribution state
   const saveDistributionState = useCallback((isOpen: boolean) => {
     try {
@@ -537,8 +570,8 @@ const AllocationPage: React.FC = () => {
               <p className="text-lg font-semibold">{formatCurrency(totalFunds)}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Total Required:</p>
-              <p className="text-lg font-semibold">{formatCurrency(totalRequired)}</p>
+              <p className="text-sm text-gray-500">Required for Pay Period:</p>
+              <p className="text-lg font-semibold">{formatCurrency(totalRequiredForPayPeriod)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Total Allocated:</p>
@@ -553,7 +586,7 @@ const AllocationPage: React.FC = () => {
                   {formatCurrency(remainingAfterManualAllocations)}
                 </p>
               </div>
-              {unallocatedFunds > 0 && (
+              {remainingForPayPeriod > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -566,7 +599,7 @@ const AllocationPage: React.FC = () => {
             </div>
           </div>
           
-          {unallocatedFunds > 0 && isDistributingExcess && (
+          {remainingForPayPeriod > 0 && isDistributingExcess && (
             <div className="mt-4">
               <div className="flex justify-between items-center mb-2">
                 <p className="text-sm font-medium text-gray-700">
@@ -590,7 +623,7 @@ const AllocationPage: React.FC = () => {
               <div className="mt-2 p-3 bg-gray-50 rounded-lg">
                 <div className="space-y-4 mt-1">
                   {accounts.map(account => {
-                    const outgoings = getOutgoingsForAccount(account.id);
+                    const outgoings = getOutgoingsForPayPeriod(account.id);
                     const totalOutgoings = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
                     const currentAllocation = getAllocationForAccount(account.id);
                     const manualAllocation = manualAllocations[account.id] || 0;
@@ -644,7 +677,7 @@ const AllocationPage: React.FC = () => {
 
       <div className="grid gap-6 mb-8">
         {accounts.map((account) => {
-          const outgoings = getOutgoingsForAccount(account.id);
+          const outgoings = getOutgoingsForPayPeriod(account.id);
           const totalOutgoings = outgoings.reduce((sum, outgoing) => sum + outgoing.amount, 0);
           const currentAllocation = getAllocationForAccount(account.id);
           const manualAllocation = manualAllocations[account.id] || 0;

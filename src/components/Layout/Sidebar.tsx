@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   PiggyBank, 
@@ -17,98 +17,35 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
   const { 
     totalFunds, 
-    totalRequired, 
-    remainingToAllocate, 
+    outgoings,
     totalAllocated,
     getNextPayDate,
     getLastPayDate,
-    payCycle,
-    outgoings
+    payCycle
   } = useAppContext();
   
   const [nextPayDate, setNextPayDate] = useState<Date>(getNextPayDate());
   const [lastPayDate, setLastPayDate] = useState<Date>(getLastPayDate());
-  const [requiredUntilPayday, setRequiredUntilPayday] = useState<number>(0);
 
-  // Update pay dates when payCycle changes
+  // Update pay dates when they change
   useEffect(() => {
     setNextPayDate(getNextPayDate());
     setLastPayDate(getLastPayDate());
-  }, [payCycle, getNextPayDate, getLastPayDate]);
+  }, [getNextPayDate, getLastPayDate]);
 
-  // Calculate required funds until next payday
-  useEffect(() => {
-    // Function to calculate the total outgoings within the pay period
-    const calculateOutgoingsInPayPeriod = () => {
-      // Create date objects for comparison
-      const nextPay = nextPayDate;
-      const lastPay = lastPayDate;
-      
-      let total = 0;
-      
-      // Loop through all outgoings to find those due in the pay period
-      outgoings.forEach(outgoing => {
-        const baseDate = new Date(outgoing.dueDate);
-        
-        // Different handling based on recurrence type
-        if (outgoing.recurrence === 'none') {
-          // For one-time payments, check if they're due during this pay period
-          if (baseDate >= lastPay && baseDate <= nextPay) {
-            total += outgoing.amount;
-          }
-        } else {
-          // For recurring payments, find the next occurrences that fall within the pay period
-          let currentDate = new Date(baseDate);
-          
-          // Find the first occurrence that happens after the last pay date
-          while (currentDate < lastPay) {
-            // Move to next occurrence based on recurrence type
-            if (outgoing.recurrence === 'weekly') {
-              currentDate.setDate(currentDate.getDate() + 7);
-            } else if (outgoing.recurrence === 'biweekly') {
-              currentDate.setDate(currentDate.getDate() + 14);
-            } else if (outgoing.recurrence === 'monthly') {
-              currentDate.setMonth(currentDate.getMonth() + 1);
-            } else if (outgoing.recurrence === 'quarterly') {
-              currentDate.setMonth(currentDate.getMonth() + 3);
-            } else if (outgoing.recurrence === 'yearly') {
-              currentDate.setFullYear(currentDate.getFullYear() + 1);
-            }
-          }
-          
-          // Now add all occurrences that fall within the pay period
-          let moreDates = true;
-          while (moreDates && currentDate <= nextPay) {
-            // This occurrence is within our pay period, so add its amount
-            total += outgoing.amount;
-            
-            // Check if there are more occurrences within the pay period
-            let nextDate = new Date(currentDate);
-            
-            if (outgoing.recurrence === 'weekly') {
-              nextDate.setDate(nextDate.getDate() + 7);
-            } else if (outgoing.recurrence === 'biweekly') {
-              nextDate.setDate(nextDate.getDate() + 14);
-            } else {
-              // Monthly, quarterly, and yearly won't have multiple occurrences in typical pay periods
-              moreDates = false;
-              continue;
-            }
-            
-            if (nextDate <= nextPay) {
-              currentDate = nextDate;
-            } else {
-              moreDates = false;
-            }
-          }
-        }
-      });
-      
+  // Calculate required funds for the current pay period
+  const requiredForPayPeriod = useMemo(() => {
+    return outgoings.reduce((total, outgoing) => {
+      const nextDate = new Date(outgoing.dueDate);
+      if (nextDate >= lastPayDate && nextDate < nextPayDate) {
+        return total + outgoing.amount;
+      }
       return total;
-    };
-    
-    setRequiredUntilPayday(calculateOutgoingsInPayPeriod());
-  }, [outgoings, nextPayDate, lastPayDate]);
+    }, 0);
+  }, [outgoings, lastPayDate, nextPayDate]);
+
+  // Calculate remaining funds for the current pay period
+  const remainingForPayPeriod = totalFunds - requiredForPayPeriod;
   
   const navLinks = [
     { to: '/', icon: <ArrowDownUp size={20} />, text: 'Allocate' },
@@ -160,7 +97,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                     </p>
                   </div>
                   <p className="text-lg font-semibold text-gray-900">
-                    {formatCurrency(requiredUntilPayday)}
+                    {formatCurrency(requiredForPayPeriod)}
                   </p>
                 </div>
                 
@@ -174,9 +111,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar }) => {
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm text-gray-500">Remaining</p>
                   <p className={`text-lg font-semibold ${
-                    totalFunds - requiredUntilPayday >= 0 ? 'text-emerald-600' : 'text-red-600'
+                    remainingForPayPeriod >= 0 ? 'text-emerald-600' : 'text-red-600'
                   }`}>
-                    {formatCurrency(totalFunds - requiredUntilPayday)}
+                    {formatCurrency(remainingForPayPeriod)}
                   </p>
                 </div>
               </div>
