@@ -41,7 +41,36 @@ interface OutgoingFormProps {
 }
 
 const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => {
-  const { accounts, addOutgoing, updateOutgoing, payCycle } = useAppContext();
+  const { accounts, addOutgoing, updateOutgoing, payCycle, currency } = useAppContext();
+  
+  // Helper to get the currency symbol based on currency code
+  const getCurrencySymbol = (currencyCode: string): string => {
+    try {
+      // Use the Intl API to get the currency symbol
+      return new Intl.NumberFormat('en', { 
+        style: 'currency', 
+        currency: currencyCode,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      })
+        .format(0)
+        .replace(/[0-9]/g, '')
+        .trim();
+    } catch (error) {
+      // Fallback to common symbols
+      const symbols: Record<string, string> = {
+        'USD': '$',
+        'EUR': '€',
+        'GBP': '£',
+        'JPY': '¥',
+        'CNY': '¥'
+      };
+      return symbols[currencyCode] || currencyCode;
+    }
+  };
+  
+  // Get the currency symbol
+  const currencySymbol = getCurrencySymbol(currency);
   
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
@@ -178,7 +207,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
           Amount
         </label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{currencySymbol}</span>
           <input
             type="number"
             id="amount"
@@ -330,7 +359,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
                   <h4 className="text-sm font-medium text-blue-800 mb-1">Payment Plan Summary</h4>
                   <p className="text-sm text-blue-700">
                     {totalInstallments} {formData.paymentPlan.frequency} {totalInstallments === 1 ? 'payment' : 'payments'} of{' '}
-                    <span className="font-medium">${suggestedInstallment.toFixed(2)}</span> each
+                    <span className="font-medium">{currencySymbol}{suggestedInstallment.toFixed(2)}</span> each
                   </p>
                   <p className="text-xs text-blue-600 mt-1">
                     From {new Date(formData.paymentPlan.startDate).toLocaleDateString()}&nbsp;to&nbsp;{new Date(formData.dueDate).toLocaleDateString()}
@@ -360,7 +389,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
                   )}
                 </div>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{currencySymbol}</span>
                   <input
                     type="number"
                     value={formData.paymentPlan.installmentAmount || ''}
@@ -382,7 +411,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
                 </p>
                 {formData.paymentPlan.installmentAmount && (
                   <p className="text-xs text-amber-600 mt-1">
-                    With this amount, you'll save ${(formData.paymentPlan.installmentAmount * totalInstallments).toFixed(2)} in total ({totalInstallments} installments)
+                    With this amount, you'll save {currencySymbol}{(formData.paymentPlan.installmentAmount * totalInstallments).toFixed(2)} in total ({totalInstallments} installments)
                   </p>
                 )}
               </div>
