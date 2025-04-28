@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Modal from '../components/UI/Modal';
 import OutgoingForm from '../components/Forms/OutgoingForm';
 import Badge from '../components/UI/Badge';
-import { Calendar, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Plus, Trash2, Settings, List, Clock } from 'lucide-react';
 import { formatCurrency, formatDate, getRelativeDateDescription, getNextOccurrence } from '../utils/formatters';
-import { Outgoing, RecurrenceType } from '../types';
+import { Outgoing, RecurrenceType, PayCycle } from '../types';
 
 // Helper type for outgoings with specific date
 interface OutgoingWithDate extends Outgoing {
   specificDate: Date;
-  isRepeatedInstance?: boolean; // Flag to indicate this is a repeated instance within the month
+  isRepeatedInstance?: boolean; // Flag to indicate this is a repeated instance within the pay period
 }
 
 // Helper to create human-readable date heading
@@ -33,8 +33,10 @@ const getDateHeading = (date: Date): string => {
   } else if (normalizedDate.getTime() === tomorrow.getTime()) {
     return 'Tomorrow';
   } else {
-    // For other dates, just use the formatted date
-    return formatDate(normalizedDate.toISOString());
+    // For other dates, include the day of the week
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayOfWeek = days[normalizedDate.getDay()];
+    return `${dayOfWeek}, ${formatDate(normalizedDate.toISOString())}`;
   }
 };
 
@@ -45,57 +47,8 @@ const getHeadingSortValue = (heading: string): number => {
   return 3; // All other dates come after
 };
 
-// Helper to get all occurrences of an outgoing within the current month or next occurrence if outside current month
-const getOutgoingOccurrences = (outgoing: Outgoing): OutgoingWithDate[] => {
-  const baseDate = new Date(outgoing.dueDate);
-  const today = new Date();
-  const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  
-  // For non-repeating outgoings or monthly/longer frequencies, just get the next occurrence
-  if (outgoing.recurrence === 'none' || 
-      outgoing.recurrence === 'monthly' || 
-      outgoing.recurrence === 'quarterly' || 
-      outgoing.recurrence === 'yearly') {
-    const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
-    return [{
-      ...outgoing,
-      specificDate: nextDate
-    }];
-  }
-  
-  // For weekly and biweekly, get all occurrences within the current month
-  const occurrences: OutgoingWithDate[] = [];
-  let currentDate = getNextOccurrence(baseDate, outgoing.recurrence);
-  
-  // If the first occurrence is already in next month, just return that
-  if (currentDate >= nextMonth) {
-    return [{
-      ...outgoing,
-      specificDate: currentDate
-    }];
-  }
-  
-  // Add all occurrences within the current month
-  while (currentDate < nextMonth) {
-    occurrences.push({
-      ...outgoing,
-      specificDate: new Date(currentDate.getTime()),
-      isRepeatedInstance: occurrences.length > 0 // Mark as repeated if not the first occurrence
-    });
-    
-    // Move to next occurrence
-    if (outgoing.recurrence === 'weekly') {
-      currentDate.setDate(currentDate.getDate() + 7);
-    } else if (outgoing.recurrence === 'biweekly') {
-      currentDate.setDate(currentDate.getDate() + 14);
-    }
-  }
-  
-  return occurrences;
-};
-
 // Helper to format the badge for recurring payments
-const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean) => {
+const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean): JSX.Element => {
   if (recurrence === 'none') {
     return <Badge variant="info">One-time</Badge>;
   }
@@ -107,12 +60,119 @@ const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boo
   return <Badge variant="primary">Recurring</Badge>;
 };
 
+// Component for pay cycle settings
+interface PayCycleSettingsProps {
+  onClose: () => void;
+  initialData: PayCycle;
+  onSave: (payCycle: PayCycle) => void;
+}
+
+const PayCycleSettingsForm: React.FC<PayCycleSettingsProps> = ({ onClose, initialData, onSave }) => {
+  const [formData, setFormData] = useState<PayCycle>({
+    ...initialData,
+    lastPayDate: initialData.lastPayDate || new Date().toISOString().split('T')[0]
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+    onClose();
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-1">
+          Pay Frequency
+        </label>
+        <select
+          id="frequency"
+          value={formData.frequency}
+          onChange={(e) => setFormData({ ...formData, frequency: e.target.value as PayCycle['frequency'] })}
+          className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="monthly">Monthly</option>
+          <option value="biweekly">Bi-weekly</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+
+      {formData.frequency === 'monthly' && (
+        <div>
+          <label htmlFor="dayOfMonth" className="block text-sm font-medium text-gray-700 mb-1">
+            Pay Day (Day of Month)
+          </label>
+          <select
+            id="dayOfMonth"
+            value={formData.dayOfMonth}
+            onChange={(e) => setFormData({ ...formData, dayOfMonth: parseInt(e.target.value, 10) })}
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+              <option key={day} value={day}>
+                {day}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {(formData.frequency === 'biweekly' || formData.frequency === 'weekly') && (
+        <div>
+          <label htmlFor="lastPayDate" className="block text-sm font-medium text-gray-700 mb-1">
+            Last Pay Date
+          </label>
+          <input
+            type="date"
+            id="lastPayDate"
+            value={formData.lastPayDate?.split('T')[0] || ''}
+            onChange={(e) => setFormData({ ...formData, lastPayDate: e.target.value })}
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+            required
+          />
+        </div>
+      )}
+
+      <div className="flex justify-end space-x-2 pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit">
+          Save Settings
+        </Button>
+      </div>
+    </form>
+  );
+};
+
+type ViewMode = 'timeline' | 'list';
+
 const OutgoingsPage: React.FC = () => {
-  const { outgoings, getAccountById, deleteOutgoing } = useAppContext();
+  const { 
+    outgoings, 
+    getAccountById, 
+    deleteOutgoing, 
+    payCycle, 
+    updatePayCycle,
+    getNextPayDate,
+    getLastPayDate,
+    accounts
+  } = useAppContext();
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPayCycleModalOpen, setIsPayCycleModalOpen] = useState(false);
   const [editingOutgoing, setEditingOutgoing] = useState<typeof outgoings[0] | undefined>();
   const [deletingOutgoing, setDeletingOutgoing] = useState<typeof outgoings[0] | undefined>();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [nextPayDate, setNextPayDate] = useState<Date>(getNextPayDate());
+  const [lastPayDate, setLastPayDate] = useState<Date>(getLastPayDate());
+  const [viewMode, setViewMode] = useState<ViewMode>('timeline');
+
+  // Update pay dates when payCycle changes
+  useEffect(() => {
+    setNextPayDate(getNextPayDate());
+    setLastPayDate(getLastPayDate());
+  }, [payCycle, getNextPayDate, getLastPayDate]);
 
   const handleEdit = (outgoing: typeof outgoings[0]) => {
     // Find the original outgoing (not the repeated instance)
@@ -147,13 +207,117 @@ const OutgoingsPage: React.FC = () => {
     setDeletingOutgoing(undefined);
   };
 
+  const handlePayCycleOpen = () => {
+    setIsPayCycleModalOpen(true);
+  };
+
+  const handlePayCycleClose = () => {
+    setIsPayCycleModalOpen(false);
+  };
+
+  const handlePayCycleSave = (newPayCycle: PayCycle) => {
+    updatePayCycle(newPayCycle);
+  };
+
+  const handleViewChange = (mode: ViewMode) => {
+    setViewMode(mode);
+  };
+
+  // Helper to get all occurrences of an outgoing within the pay period
+  const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing): OutgoingWithDate[] => {
+    const baseDate = new Date(outgoing.dueDate);
+    const occurrences: OutgoingWithDate[] = [];
+    
+    // For non-repeating outgoings, just get the next occurrence
+    if (outgoing.recurrence === 'none') {
+      const nextDate = getNextOccurrence(baseDate, outgoing.recurrence);
+      
+      // Only include if it falls within the pay period or is the next upcoming after the period
+      if (nextDate >= lastPayDate) {
+        return [{
+          ...outgoing,
+          specificDate: nextDate
+        }];
+      }
+      return [];
+    }
+    
+    // For all recurring payments, find occurrences within the pay period
+    let currentDate = getNextOccurrence(baseDate, outgoing.recurrence);
+    
+    // If the first occurrence is already beyond the next pay date, show it anyway
+    if (currentDate > nextPayDate) {
+      return [{
+        ...outgoing,
+        specificDate: currentDate
+      }];
+    }
+    
+    // Find the first occurrence that falls after the last pay date
+    while (currentDate < lastPayDate) {
+      // Move to next occurrence based on recurrence type
+      if (outgoing.recurrence === 'weekly') {
+        currentDate.setDate(currentDate.getDate() + 7);
+      } else if (outgoing.recurrence === 'biweekly') {
+        currentDate.setDate(currentDate.getDate() + 14);
+      } else if (outgoing.recurrence === 'monthly') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      } else if (outgoing.recurrence === 'quarterly') {
+        currentDate.setMonth(currentDate.getMonth() + 3);
+      } else if (outgoing.recurrence === 'yearly') {
+        currentDate.setFullYear(currentDate.getFullYear() + 1);
+      }
+    }
+    
+    // Now add all occurrences that fall within the pay period
+    // For weekly/biweekly, add multiple occurrences; for others, just add one
+    let shouldAddMore = true;
+    while (shouldAddMore) {
+      // Add the current occurrence since it's after lastPayDate
+      occurrences.push({
+        ...outgoing,
+        specificDate: new Date(currentDate.getTime()),
+        isRepeatedInstance: occurrences.length > 0 // Mark as repeated if not the first occurrence
+      });
+      
+      // Determine if we should add more occurrences based on recurrence type
+      if (outgoing.recurrence === 'weekly' || outgoing.recurrence === 'biweekly') {
+        // Move to next occurrence
+        const nextDate = new Date(currentDate);
+        if (outgoing.recurrence === 'weekly') {
+          nextDate.setDate(nextDate.getDate() + 7);
+        } else {
+          nextDate.setDate(nextDate.getDate() + 14);
+        }
+        
+        // Add the occurrence if it's within the pay period
+        if (nextDate <= nextPayDate) {
+          currentDate = nextDate;
+        } else {
+          shouldAddMore = false;
+        }
+      } else {
+        // For monthly, quarterly, and yearly, we only show one occurrence per pay period
+        shouldAddMore = false;
+      }
+    }
+    
+    return occurrences;
+  };
+
   // Get all occurrences for each outgoing
   const allOutgoingOccurrences: OutgoingWithDate[] = outgoings.flatMap(outgoing => 
-    getOutgoingOccurrences(outgoing)
+    getOutgoingOccurrencesInPayPeriod(outgoing)
   );
 
+  // Filter occurrences to only include those within the current pay period
+  const payPeriodOccurrences = allOutgoingOccurrences.filter(outgoing => {
+    const date = outgoing.specificDate;
+    return date >= lastPayDate && date < nextPayDate;
+  });
+
   // Sort by date
-  const sortedOccurrences = allOutgoingOccurrences.sort((a, b) => 
+  const sortedOccurrences = payPeriodOccurrences.sort((a, b) => 
     a.specificDate.getTime() - b.specificDate.getTime()
   );
 
@@ -184,57 +348,211 @@ const OutgoingsPage: React.FC = () => {
     return 0;
   });
 
+  // For list view, group outgoings by account
+  const outgoingsByAccount: { [accountId: string]: Outgoing[] } = {};
+  
+  // Group outgoings by account ID
+  outgoings.forEach(outgoing => {
+    if (!outgoingsByAccount[outgoing.accountId]) {
+      outgoingsByAccount[outgoing.accountId] = [];
+    }
+    outgoingsByAccount[outgoing.accountId].push(outgoing);
+  });
+
+  // Format the next payment date for each outgoing in the list view
+  const getNextPaymentDate = (outgoing: Outgoing): string => {
+    const nextDate = getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence);
+    return formatDate(nextDate.toISOString());
+  };
+
+  // Get the total amount for each account
+  const getAccountTotal = (accountId: string): number => {
+    return outgoingsByAccount[accountId]?.reduce((sum, outgoing) => sum + outgoing.amount, 0) || 0;
+  };
+
   return (
     <div className="max-w-5xl mx-auto pb-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Outgoings</h1>
           <p className="text-gray-500 mt-1">Manage your upcoming payments</p>
         </div>
-        <Button 
-          icon={<Plus size={18} />}
-          onClick={() => setIsModalOpen(true)}
-        >
-          New Outgoing
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            icon={<Plus size={18} />}
+            onClick={() => setIsModalOpen(true)}
+          >
+            New Outgoing
+          </Button>
+          <Button 
+            variant="outline"
+            icon={<Settings size={18} />}
+            onClick={handlePayCycleOpen}
+          >
+            Pay Cycle
+          </Button>
+        </div>
       </div>
 
-      <div className="space-y-6 mb-8">
-        {sortedHeadings.map(heading => {
-          const outgoings = groupedOutgoings[heading];
-          return (
-            <div key={heading}>
-              <h2 className="text-lg font-semibold text-gray-700 mb-3 border-l-4 border-indigo-500 pl-3">
-                {heading}
-              </h2>
-              <div className="grid gap-3">
-                {outgoings.map((outgoing, index) => {
-                  const account = getAccountById(outgoing.accountId);
-                  const key = `${outgoing.id}-${index}`;
-                  
-                  return (
+      <div className="flex justify-center mb-6">
+        <div className="inline-flex rounded-md shadow-sm" role="group">
+          <button
+            type="button"
+            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-l-lg ${
+              viewMode === 'list' 
+                ? 'bg-indigo-600 text-white' 
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+            onClick={() => handleViewChange('list')}
+          >
+            <List size={16} className="mr-2" />
+            List View
+          </button>
+          <button
+            type="button"
+            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-r-lg ${
+              viewMode === 'timeline' 
+                ? 'bg-indigo-600 text-white' 
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+            onClick={() => handleViewChange('timeline')}
+          >
+            <Clock size={16} className="mr-2" />
+            Timeline View
+          </button>
+        </div>
+      </div>
+
+      {/* Timeline View */}
+      {viewMode === 'timeline' && (
+        <>
+          <div className="bg-gray-50 py-4 rounded-lg mb-6 flex justify-between items-center">
+            <div>
+              <p className="text-sm text-gray-500">Current Pay Period:</p>
+              <p className="text-md font-medium">
+                {formatDate(lastPayDate.toISOString())} to {formatDate(new Date(nextPayDate.getTime() - 24 * 60 * 60 * 1000).toISOString())}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Next Payday:</p>
+              <p className="text-md font-medium">{formatDate(nextPayDate.toISOString())}</p>
+            </div>
+          </div>
+
+          <div className="space-y-6 mb-8">
+            {sortedHeadings.map(heading => {
+              const outgoings = groupedOutgoings[heading];
+              return (
+                <div key={heading}>
+                  <h2 className="text-lg font-semibold text-gray-700 mb-3 border-l-4 border-indigo-500 pl-3">
+                    {heading}
+                  </h2>
+                  <div className="grid gap-3">
+                    {outgoings.map((outgoing, index) => {
+                      const account = getAccountById(outgoing.accountId);
+                      const key = `${outgoing.id}-${index}`;
+                      
+                      return (
+                        <Card 
+                          key={key}
+                          className={`hover:border-indigo-100 transition-colors ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}`}
+                          onClick={() => handleEdit(outgoing)}
+                        >
+                          <div className="flex items-center">
+                            <div 
+                              className="w-12 h-12 rounded-full flex items-center justify-center mr-4"
+                              style={{ backgroundColor: account?.color + '20' }}
+                            >
+                              <Calendar size={24} style={{ color: account?.color }} />
+                            </div>
+                            
+                            <div className="flex-grow">
+                              <div className="flex items-center gap-3">
+                                <h3 className="text-lg font-semibold text-gray-900">{outgoing.name}</h3>
+                                {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance)}
+                              </div>
+                              <p className="text-sm text-gray-500">
+                                {account?.name} • {outgoing.isRepeatedInstance ? 
+                                  `Due on ${formatDate(outgoing.specificDate.toISOString())}` : 
+                                  getRelativeDateDescription(outgoing.dueDate, outgoing.recurrence)}
+                              </p>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <p className="text-lg font-semibold text-gray-900">
+                                  {formatCurrency(outgoing.amount)}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {outgoing.isRepeatedInstance ? 
+                                    'Recurring payment' : 
+                                    `Next due ${formatDate(outgoing.specificDate.toISOString())}`}
+                                </p>
+                              </div>
+                              <button 
+                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                onClick={(e) => handleDeleteClick(e, outgoing)}
+                                aria-label="Delete outgoing"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            
+            {Object.keys(groupedOutgoings).length === 0 && (
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <p className="text-gray-500">No outgoings found in current pay period</p>
+                <p className="text-sm text-gray-400 mt-1">Click "New Outgoing" to add one</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
+        <div className="space-y-6 mb-8">
+          {accounts.map(account => {
+            const accountOutgoings = outgoingsByAccount[account.id] || [];
+            
+            if (accountOutgoings.length === 0) return null;
+            
+            return (
+              <div key={account.id}>
+                <div className="flex justify-between items-center mb-3">
+                  <h2 
+                    className="text-lg font-semibold mb-0 border-l-4 pl-3"
+                    style={{ borderColor: account.color }}
+                  >
+                    {account.name}
+                  </h2>
+                  <p className="text-md font-medium">
+                    Total: {formatCurrency(getAccountTotal(account.id))}
+                  </p>
+                </div>
+                
+                <div className="grid gap-2">
+                  {accountOutgoings.map((outgoing) => (
                     <Card 
-                      key={key}
-                      className={`hover:border-indigo-100 transition-colors ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}`}
+                      key={outgoing.id}
+                      className="hover:border-indigo-100 transition-colors py-3"
                       onClick={() => handleEdit(outgoing)}
                     >
                       <div className="flex items-center">
-                        <div 
-                          className="w-12 h-12 rounded-full flex items-center justify-center mr-4"
-                          style={{ backgroundColor: account?.color + '20' }}
-                        >
-                          <Calendar size={24} style={{ color: account?.color }} />
-                        </div>
-                        
-                        <div className="flex-grow">
+                        <div className="flex-grow pl-2">
                           <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-semibold text-gray-900">{outgoing.name}</h3>
-                            {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance)}
+                            <h3 className="text-md font-medium text-gray-900">{outgoing.name}</h3>
+                            {getRecurrenceBadge(outgoing.recurrence)}
                           </div>
-                          <p className="text-sm text-gray-500">
-                            {account?.name} • {outgoing.isRepeatedInstance ? 
-                              `Due on ${formatDate(outgoing.specificDate.toISOString())}` : 
-                              getRelativeDateDescription(outgoing.dueDate, outgoing.recurrence)}
+                          <p className="text-xs text-gray-500">
+                            Next payment: {getNextPaymentDate(outgoing)}
                           </p>
                         </div>
                         
@@ -242,37 +560,30 @@ const OutgoingsPage: React.FC = () => {
                           <p className="text-lg font-semibold text-gray-900 mr-4">
                             {formatCurrency(outgoing.amount)}
                           </p>
-                          <p className="text-sm text-gray-500 mr-4">
-                            {outgoing.isRepeatedInstance ? 
-                              'Recurring payment' : 
-                              `Next due ${formatDate(outgoing.specificDate.toISOString())}`}
-                          </p>
-                          {!outgoing.isRepeatedInstance && (
-                            <button 
-                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                              onClick={(e) => handleDeleteClick(e, outgoing)}
-                              aria-label="Delete outgoing"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          )}
+                          <button 
+                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                            onClick={(e) => handleDeleteClick(e, outgoing)}
+                            aria-label="Delete outgoing"
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
                       </div>
                     </Card>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
+            );
+          })}
+          
+          {outgoings.length === 0 && (
+            <div className="text-center py-12 bg-gray-50 rounded-lg">
+              <p className="text-gray-500">No outgoings found</p>
+              <p className="text-sm text-gray-400 mt-1">Click "New Outgoing" to add one</p>
             </div>
-          );
-        })}
-        
-        {Object.keys(groupedOutgoings).length === 0 && (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-500">No outgoings found</p>
-            <p className="text-sm text-gray-400 mt-1">Click "New Outgoing" to add one</p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <Modal
         isOpen={isModalOpen}
@@ -302,6 +613,23 @@ const OutgoingsPage: React.FC = () => {
               Delete
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isPayCycleModalOpen}
+        onClose={handlePayCycleClose}
+        title="Pay Cycle Settings"
+      >
+        <div className="p-4">
+          <p className="mb-4 text-sm text-gray-500">
+            Configure your pay cycle to see all bills due between pay periods.
+          </p>
+          <PayCycleSettingsForm
+            onClose={handlePayCycleClose}
+            initialData={payCycle}
+            onSave={handlePayCycleSave}
+          />
         </div>
       </Modal>
     </div>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Income, Outgoing, Account, FundSource } from '../types';
+import { Income, Outgoing, Account, FundSource, PayCycle } from '../types';
 
 interface Allocation {
   id: string;
@@ -14,6 +14,7 @@ interface AppContextType {
   availableFunds: number; // Keep for backward compatibility
   fundSources: FundSource[];
   allocations: Allocation[];
+  payCycle: PayCycle;
   
   // Data manipulation functions
   addAccount: (account: Omit<Account, 'id'>) => void;
@@ -30,6 +31,7 @@ interface AppContextType {
   deleteFundSource: (id: string) => void;
   resetFundSources: () => string;
   updateAllocations: (allocations: Allocation[]) => void;
+  updatePayCycle: (payCycle: PayCycle) => void;
   
   // Derived data
   totalAllocated: number;
@@ -40,6 +42,11 @@ interface AppContextType {
   getAllocationForAccount: (accountId: string) => number;
   getAccountById: (id: string) => Account | undefined;
   calculateTotalUpcomingOutgoings: () => number;
+  
+  // Pay cycle utilities
+  getNextPayDate: () => Date;
+  getLastPayDate: () => Date;
+  isWithinPayCycle: (date: Date) => boolean;
 }
 
 const STORAGE_KEYS = {
@@ -48,6 +55,7 @@ const STORAGE_KEYS = {
   AVAILABLE_FUNDS: 'flowfund_available_funds',
   FUND_SOURCES: 'flowfund_fund_sources',
   ALLOCATIONS: 'flowfund_allocations',
+  PAY_CYCLE: 'flowfund_pay_cycle',
 };
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -103,6 +111,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadFromStorage(STORAGE_KEYS.ALLOCATIONS, [])
   );
   
+  const [payCycle, setPayCycle] = useState<PayCycle>(() => 
+    loadFromStorage(STORAGE_KEYS.PAY_CYCLE, {
+      dayOfMonth: 28, // Default to 28th of the month
+      frequency: 'monthly'
+    })
+  );
+  
   // Calculated total funds from all sources
   const totalFunds = fundSources.reduce((sum, source) => sum + source.amount, 0);
   
@@ -131,6 +146,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.ALLOCATIONS, allocations);
   }, [allocations]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.PAY_CYCLE, payCycle);
+  }, [payCycle]);
   
   const addAccount = (account: Omit<Account, 'id'>) => {
     const newAccount = { ...account, id: crypto.randomUUID() };
@@ -258,6 +277,125 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const totalAllocated = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
   const remainingToAllocate = totalFunds - totalRequired;
   
+  const updatePayCycle = (newPayCycle: PayCycle) => {
+    setPayCycle(newPayCycle);
+  };
+  
+  // Get the next pay date based on the pay cycle settings
+  const getNextPayDate = (): Date => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    if (payCycle.frequency === 'monthly') {
+      // Create a date for this month's payday
+      const thisMonthPayday = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
+      
+      // If payday is in the future or today, return it
+      if (thisMonthPayday > today) {
+        return thisMonthPayday;
+      }
+      
+      // Otherwise, return next month's payday
+      return new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
+    } 
+    else if (payCycle.frequency === 'biweekly' || payCycle.frequency === 'weekly') {
+      // For these frequencies, we need the last pay date to calculate the next one
+      if (!payCycle.lastPayDate) {
+        // If no last pay date is set, use today as the base and calculate forward
+        const defaultPayDate = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
+        return defaultPayDate > today ? defaultPayDate : new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
+      }
+      
+      const lastPay = new Date(payCycle.lastPayDate);
+      let nextPay = new Date(lastPay);
+      
+      // Add appropriate number of days based on frequency
+      if (payCycle.frequency === 'biweekly') {
+        nextPay.setDate(lastPay.getDate() + 14); // Add two weeks
+      } else {
+        nextPay.setDate(lastPay.getDate() + 7); // Add one week
+      }
+      
+      // If the calculated next pay date is in the past, keep adding periods until it's in the future
+      while (nextPay <= today) {
+        if (payCycle.frequency === 'biweekly') {
+          nextPay.setDate(nextPay.getDate() + 14);
+        } else {
+          nextPay.setDate(nextPay.getDate() + 7);
+        }
+      }
+      
+      return nextPay;
+    }
+    
+    // Fallback in case of unexpected frequency
+    return new Date(currentYear, currentMonth + 1, payCycle.dayOfMonth);
+  };
+  
+  // Get the last pay date based on the pay cycle settings
+  const getLastPayDate = (): Date => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    if (payCycle.frequency === 'monthly') {
+      // Create a date for this month's payday
+      const thisMonthPayday = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
+      
+      // If payday is in the future or today, return last month's payday
+      if (thisMonthPayday > today) {
+        return new Date(currentYear, currentMonth - 1, payCycle.dayOfMonth);
+      }
+      
+      // Otherwise, return this month's payday since it's in the past
+      return thisMonthPayday;
+    } 
+    else if (payCycle.frequency === 'biweekly' || payCycle.frequency === 'weekly') {
+      // For these frequencies, we need the last pay date from our settings
+      if (payCycle.lastPayDate) {
+        const lastPay = new Date(payCycle.lastPayDate);
+        let nextPay = new Date(lastPay);
+        
+        // Calculate the most recent pay date by starting from the last known
+        // pay date and adding periods until we're past today, then step back once
+        while (true) {
+          const prevPay = new Date(nextPay);
+          
+          if (payCycle.frequency === 'biweekly') {
+            nextPay.setDate(nextPay.getDate() + 14);
+          } else {
+            nextPay.setDate(nextPay.getDate() + 7);
+          }
+          
+          if (nextPay > today) {
+            return prevPay;
+          }
+        }
+      }
+      
+      // If no last pay date is set, default to the previous occurrence of the day of month
+      const defaultPayDate = new Date(currentYear, currentMonth, payCycle.dayOfMonth);
+      return defaultPayDate > today 
+        ? new Date(currentYear, currentMonth - 1, payCycle.dayOfMonth)
+        : defaultPayDate;
+    }
+    
+    // Fallback
+    return new Date(currentYear, currentMonth, payCycle.dayOfMonth);
+  };
+  
+  // Check if a date falls within the current pay cycle
+  const isWithinPayCycle = (date: Date): boolean => {
+    const lastPayDate = getLastPayDate();
+    const nextPayDate = getNextPayDate();
+    
+    // Check if the date is after the last payday and before the next payday
+    // Note: We use >= for lastPayDate to include the start of the period
+    // and < for nextPayDate to exclude the end of the period
+    return date >= lastPayDate && date < nextPayDate;
+  };
+  
   return (
     <AppContext.Provider value={{
       // Data
@@ -266,6 +404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       availableFunds,
       fundSources,
       allocations,
+      payCycle,
       
       // Functions
       addAccount,
@@ -282,6 +421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deleteFundSource,
       resetFundSources,
       updateAllocations,
+      updatePayCycle,
       
       // Derived data
       totalAllocated,
@@ -292,6 +432,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       getAllocationForAccount,
       getAccountById,
       calculateTotalUpcomingOutgoings,
+      
+      // Pay cycle utilities
+      getNextPayDate,
+      getLastPayDate,
+      isWithinPayCycle,
     }}>
       {children}
     </AppContext.Provider>

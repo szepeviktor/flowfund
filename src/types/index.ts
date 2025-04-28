@@ -39,3 +39,9 @@ export interface FundSource {
   id: string;
   amount: number;
 }
+
+export interface PayCycle {
+  dayOfMonth: number; // Day of the month for payday (1-31)
+  frequency: 'monthly' | 'biweekly' | 'weekly'; // How often you get paid
+  lastPayDate?: string; // ISO date string of last payday, needed for non-monthly frequencies
+}
