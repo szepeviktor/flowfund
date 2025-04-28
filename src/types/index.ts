@@ -2,6 +2,14 @@
 
 export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 
+export interface PaymentPlan {
+  enabled: boolean;
+  startDate: string; // ISO date string when to start saving
+  frequency: 'weekly' | 'biweekly' | 'monthly';
+  installmentAmount?: number; // If specified, user sets amount per installment
+  // If installmentAmount is not specified, it's calculated based on total amount, startDate and dueDate
+}
+
 export interface Income {
   id: string;
   source: string;
@@ -19,6 +27,7 @@ export interface Outgoing {
   recurrence: RecurrenceType;
   notes?: string;
   accountId: string;
+  paymentPlan?: PaymentPlan; // Optional payment plan for saving up for this expense
 }
 
 export interface Account {

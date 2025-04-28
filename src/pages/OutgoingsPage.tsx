@@ -6,7 +6,7 @@ import Modal from '../components/UI/Modal';
 import OutgoingForm from '../components/Forms/OutgoingForm';
 import Badge from '../components/UI/Badge';
 import Select from '../components/UI/Select';
-import { Calendar, Plus, Trash2, Settings, List, Clock, ListFilter } from 'lucide-react';
+import { Calendar, Plus, Trash2, Settings, List, Clock, ListFilter, PiggyBank } from 'lucide-react';
 import { formatCurrency, formatDate, getRelativeDateDescription, getNextOccurrence } from '../utils/formatters';
 import { Outgoing, RecurrenceType, PayCycle } from '../types';
 
@@ -14,6 +14,8 @@ import { Outgoing, RecurrenceType, PayCycle } from '../types';
 interface OutgoingWithDate extends Outgoing {
   specificDate: Date;
   isRepeatedInstance?: boolean; // Flag to indicate this is a repeated instance within the pay period
+  isPaymentPlanInstallment?: boolean; // Flag to indicate this is an installment for a payment plan
+  originalOutgoingId?: string; // Reference to the original outgoing for payment plan installments
 }
 
 // Helper to create human-readable date heading
@@ -49,7 +51,11 @@ const getHeadingSortValue = (heading: string): number => {
 };
 
 // Helper to format the badge for recurring payments
-const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean): JSX.Element => {
+const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean, isPaymentPlanInstallment?: boolean): JSX.Element => {
+  if (isPaymentPlanInstallment) {
+    return <Badge variant="warning" className="bg-amber-100 text-amber-800 border-amber-200">Installment</Badge>;
+  }
+  
   if (recurrence === 'none') {
     return <Badge variant="info" className="bg-purple-100 text-purple-800 border-purple-200">One-time</Badge>;
   }
@@ -194,8 +200,85 @@ const OutgoingsPage: React.FC = () => {
   // Get pay period dates
   const { startDate, endDate } = useMemo(() => getPayPeriod(), [getPayPeriod]);
 
+  // Helper to get payment plan installments for an outgoing
+  const getPaymentPlanInstallments = (outgoing: Outgoing): OutgoingWithDate[] => {
+    // If no payment plan or not enabled, return empty array
+    if (!outgoing.paymentPlan || !outgoing.paymentPlan.enabled) {
+      return [];
+    }
+
+    const installments: OutgoingWithDate[] = [];
+    const startDate = new Date(outgoing.paymentPlan.startDate);
+    const dueDate = new Date(outgoing.dueDate);
+    
+    // Ensure dates are valid
+    if (isNaN(startDate.getTime()) || isNaN(dueDate.getTime()) || startDate >= dueDate) {
+      return [];
+    }
+    
+    // Calculate installment amount - either use specified amount or calculate based on dates
+    let currentDate = new Date(startDate);
+    let totalInstallments = 0;
+    
+    // First count total installments
+    while (currentDate < dueDate) {
+      totalInstallments++;
+      if (outgoing.paymentPlan.frequency === 'weekly') {
+        currentDate.setDate(currentDate.getDate() + 7);
+      } else if (outgoing.paymentPlan.frequency === 'biweekly') {
+        currentDate.setDate(currentDate.getDate() + 14);
+      } else if (outgoing.paymentPlan.frequency === 'monthly') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
+    }
+    
+    // Now calculate amount if not specified
+    const installmentAmount = outgoing.paymentPlan.installmentAmount || 
+      (totalInstallments > 0 ? Math.ceil((outgoing.amount / totalInstallments) * 100) / 100 : outgoing.amount);
+    
+    // Reset currentDate to re-iterate
+    currentDate = new Date(startDate);
+    let installmentNumber = 1;
+    
+    // Generate installments
+    while (currentDate < dueDate) {
+      // Only add installments that are within our pay period
+      const payPeriodDates = getPayPeriod();
+      if (currentDate >= payPeriodDates.startDate && currentDate <= payPeriodDates.endDate) {
+        installments.push({
+          ...outgoing,
+          id: `${outgoing.id}-installment-${installmentNumber}`,
+          amount: installmentAmount,
+          specificDate: new Date(currentDate),
+          isPaymentPlanInstallment: true,
+          originalOutgoingId: outgoing.id,
+          name: `${outgoing.name} (Installment ${installmentNumber}/${totalInstallments})`
+        });
+      }
+      
+      // Move to next date based on frequency
+      if (outgoing.paymentPlan.frequency === 'weekly') {
+        currentDate.setDate(currentDate.getDate() + 7);
+      } else if (outgoing.paymentPlan.frequency === 'biweekly') {
+        currentDate.setDate(currentDate.getDate() + 14);
+      } else if (outgoing.paymentPlan.frequency === 'monthly') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
+      
+      installmentNumber++;
+    }
+    
+    return installments;
+  };
+
   // Helper to get all occurrences of an outgoing within the pay period
   const getOutgoingOccurrencesInPayPeriod = (outgoing: Outgoing): OutgoingWithDate[] => {
+    // Check if this outgoing has a payment plan
+    if (outgoing.paymentPlan?.enabled) {
+      // Return payment plan installments instead of the regular occurrence
+      return getPaymentPlanInstallments(outgoing);
+    }
+    
     const baseDate = new Date(outgoing.dueDate);
     const occurrences: OutgoingWithDate[] = [];
     
@@ -341,7 +424,21 @@ const OutgoingsPage: React.FC = () => {
     return outgoingsByAccount[accountId]?.reduce((sum, outgoing) => sum + outgoing.amount, 0) || 0;
   };
 
-  const handleEdit = (outgoing: typeof outgoings[0]) => {
+  const handleEdit = (outgoing: OutgoingWithDate | Outgoing) => {
+    const outgoingWithDate = 'specificDate' in outgoing ? 
+      outgoing : 
+      { ...outgoing, specificDate: getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence) };
+      
+    // If this is a payment plan installment, find the original outgoing
+    if ('isPaymentPlanInstallment' in outgoingWithDate && outgoingWithDate.isPaymentPlanInstallment && outgoingWithDate.originalOutgoingId) {
+      const originalOutgoing = outgoings.find(o => o.id === outgoingWithDate.originalOutgoingId);
+      if (originalOutgoing) {
+        setEditingOutgoing(originalOutgoing);
+        setIsModalOpen(true);
+      }
+      return;
+    }
+    
     // Find the original outgoing (not the repeated instance)
     const originalOutgoing = outgoings.find(o => o.id === outgoing.id);
     if (originalOutgoing) {
@@ -355,8 +452,24 @@ const OutgoingsPage: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleDeleteClick = (e: React.MouseEvent, outgoing: typeof outgoings[0]) => {
+  const handleDeleteClick = (e: React.MouseEvent, outgoing: OutgoingWithDate | Outgoing) => {
     e.stopPropagation(); // Prevent card click from triggering
+    
+    const outgoingWithDate = 'specificDate' in outgoing ? 
+      outgoing as OutgoingWithDate : 
+      { ...outgoing, specificDate: getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence) } as OutgoingWithDate;
+    
+    // If this is a payment plan installment, we need to edit the original outgoing instead of deleting
+    if (outgoingWithDate.isPaymentPlanInstallment && outgoingWithDate.originalOutgoingId) {
+      e.stopPropagation();
+      const originalOutgoing = outgoings.find(o => o.id === outgoingWithDate.originalOutgoingId);
+      if (originalOutgoing) {
+        setEditingOutgoing(originalOutgoing);
+        setIsModalOpen(true);
+      }
+      return;
+    }
+    
     setDeletingOutgoing(outgoing);
     setIsDeleteModalOpen(true);
   };
@@ -384,6 +497,19 @@ const OutgoingsPage: React.FC = () => {
 
   const handlePayCycleSave = (newPayCycle: PayCycle) => {
     updatePayCycle(newPayCycle);
+  };
+
+  // Helper to ensure an outgoing object has a specificDate property
+  const ensureSpecificDate = (outgoing: Outgoing): OutgoingWithDate => {
+    if ('specificDate' in outgoing) {
+      return outgoing as OutgoingWithDate;
+    } else {
+      // Add a specificDate based on the dueDate if not present
+      return {
+        ...outgoing,
+        specificDate: getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence)
+      };
+    }
   };
 
   return (
@@ -453,7 +579,9 @@ const OutgoingsPage: React.FC = () => {
                       return (
                         <Card 
                           key={key}
-                          className={`hover:border-indigo-100 transition-colors ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}`}
+                          className={`hover:border-indigo-100 transition-colors 
+                            ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}
+                            ${outgoing.isPaymentPlanInstallment ? 'border-l-4 border-l-amber-300' : ''}`}
                           onClick={() => handleEdit(outgoing)}
                         >
                           <div className="flex items-center">
@@ -461,18 +589,26 @@ const OutgoingsPage: React.FC = () => {
                               className="w-12 h-12 rounded-full flex items-center justify-center mr-4"
                               style={{ backgroundColor: account?.color + '20' }}
                             >
-                              <Calendar size={24} style={{ color: account?.color }} />
+                              {outgoing.isPaymentPlanInstallment ? (
+                                <PiggyBank size={24} style={{ color: account?.color }} />
+                              ) : (
+                                <Calendar size={24} style={{ color: account?.color }} />
+                              )}
                             </div>
                             
                             <div className="flex-grow">
                               <div className="flex items-center gap-3">
                                 <h3 className="text-lg font-semibold text-gray-900">{outgoing.name}</h3>
-                                {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance)}
+                                {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance, outgoing.isPaymentPlanInstallment)}
                               </div>
                               <p className="text-sm text-gray-500">
-                                {account?.name} • {outgoing.isRepeatedInstance ? 
+                                {account?.name} • {outgoing.isRepeatedInstance || outgoing.isPaymentPlanInstallment ? 
                                   `Due on ${formatDate(outgoing.specificDate.toISOString())}` : 
                                   getRelativeDateDescription(outgoing.dueDate, outgoing.recurrence)}
+                                  
+                                {outgoing.isPaymentPlanInstallment && outgoing.originalOutgoingId && (
+                                  <span> • For {outgoing.name.split(' (Installment')[0]}</span>
+                                )}
                               </p>
                             </div>
                             
@@ -482,17 +618,25 @@ const OutgoingsPage: React.FC = () => {
                                   {formatCurrency(outgoing.amount, currency)}
                                 </p>
                                 <p className="text-sm text-gray-500">
-                                  {outgoing.isRepeatedInstance ? 
-                                    getRecurrenceDescription(outgoing.recurrence) : 
-                                    `Next due ${formatDate(outgoing.specificDate.toISOString())}`}
+                                  {outgoing.isPaymentPlanInstallment ? (
+                                    `Installment for ${formatDate(new Date(outgoing.dueDate).toISOString())}`
+                                  ) : outgoing.isRepeatedInstance ? (
+                                    getRecurrenceDescription(outgoing.recurrence)
+                                  ) : (
+                                    `Next due ${formatDate(outgoing.specificDate.toISOString())}`
+                                  )}
                                 </p>
                               </div>
                               <button 
                                 className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                                 onClick={(e) => handleDeleteClick(e, outgoing)}
-                                aria-label="Delete outgoing"
+                                aria-label={outgoing.isPaymentPlanInstallment ? "Edit payment plan" : "Delete outgoing"}
                               >
-                                <Trash2 size={18} />
+                                {outgoing.isPaymentPlanInstallment ? (
+                                  <Settings size={18} />
+                                ) : (
+                                  <Trash2 size={18} />
+                                )}
                               </button>
                             </div>
                           </div>
@@ -540,7 +684,9 @@ const OutgoingsPage: React.FC = () => {
                   {accountOutgoings.map((outgoing) => (
                     <Card 
                       key={outgoing.id}
-                      className="hover:border-indigo-100 transition-colors py-3"
+                      className={`hover:border-indigo-100 transition-colors py-3 ${
+                        outgoing.paymentPlan?.enabled ? 'border-l-4 border-l-amber-300' : ''
+                      }`}
                       onClick={() => handleEdit(outgoing)}
                     >
                       <div className="flex items-center">
@@ -548,9 +694,18 @@ const OutgoingsPage: React.FC = () => {
                           <div className="flex items-center gap-3">
                             <h3 className="text-md font-medium text-gray-900">{outgoing.name}</h3>
                             {getRecurrenceBadge(outgoing.recurrence)}
+                            {outgoing.paymentPlan?.enabled && (
+                              <Badge variant="warning" className="bg-amber-100 text-amber-800 border-amber-200">
+                                Payment Plan
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-xs text-gray-500">
                             {getRecurrenceDescription(outgoing.recurrence)} • Next: {getNextPaymentDate(outgoing)}
+                            {outgoing.paymentPlan?.enabled && (
+                              <span> • Saving: {formatCurrency(outgoing.paymentPlan.installmentAmount || 0, currency)}/
+                              {outgoing.paymentPlan.frequency}</span>
+                            )}
                           </p>
                         </div>
                         
