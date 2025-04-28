@@ -29,7 +29,11 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
     recurrence: initialData?.recurrence || 'monthly' as RecurrenceType,
     accountId: initialData?.accountId || accounts[0]?.id || '',
     notes: initialData?.notes || '',
-    paymentPlan: initialData?.paymentPlan || {
+    paymentPlan: initialData?.paymentPlan ? {
+      ...initialData.paymentPlan,
+      // Ensure startDate is properly formatted for the date input (YYYY-MM-DD)
+      startDate: initialData.paymentPlan.startDate?.split('T')[0] || new Date().toISOString().split('T')[0]
+    } : {
       enabled: false,
       startDate: new Date().toISOString().split('T')[0],
       frequency: 'monthly' as PaymentPlan['frequency'],
@@ -100,8 +104,10 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
         ...formData.paymentPlan,
         enabled: true,
         startDate: new Date(formData.paymentPlan.startDate).toISOString(),
-        // If no custom installment amount, use suggested
-        installmentAmount: formData.paymentPlan.installmentAmount || suggestedInstallment || undefined
+        // Only use the custom amount if explicitly set, otherwise keep it undefined
+        // The installment calculator in OutgoingsPage will handle calculating the amount if undefined
+        installmentAmount: formData.paymentPlan.installmentAmount !== undefined ? 
+          formData.paymentPlan.installmentAmount : undefined
       } : undefined
     };
     
@@ -273,8 +279,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
                   <span className="font-medium">${suggestedInstallment.toFixed(2)}</span> each
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
-                  From {new Date(formData.paymentPlan.startDate).toLocaleDateString()} 
-                  to {new Date(formData.dueDate).toLocaleDateString()}
+                  From {new Date(formData.paymentPlan.startDate).toLocaleDateString()}&nbsp;to&nbsp;{new Date(formData.dueDate).toLocaleDateString()}
                 </p>
               </div>
             )}
@@ -323,8 +328,7 @@ const OutgoingForm: React.FC<OutgoingFormProps> = ({ onClose, initialData }) => 
               </p>
               {formData.paymentPlan.installmentAmount && (
                 <p className="text-xs text-amber-600 mt-1">
-                  With this amount, you'll save ${(formData.paymentPlan.installmentAmount * totalInstallments).toFixed(2)} 
-                  in total ({totalInstallments} installments)
+                  With this amount, you'll save ${(formData.paymentPlan.installmentAmount * totalInstallments).toFixed(2)} in total ({totalInstallments} installments)
                 </p>
               )}
             </div>

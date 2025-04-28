@@ -81,6 +81,16 @@ const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boo
   }
 };
 
+// Helper to check if a date is in the past
+const isPastDue = (date: Date): boolean => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date < today;
+};
+
+// Special group key for expired outgoings
+const EXPIRED_GROUP_KEY = "___EXPIRED___";
+
 // Component for pay cycle settings
 interface PayCycleSettingsProps {
   onClose: () => void;
@@ -233,9 +243,11 @@ const OutgoingsPage: React.FC = () => {
     }
     
     // Now calculate amount if not specified
-    const installmentAmount = outgoing.paymentPlan.installmentAmount || 
+    // Use the custom installmentAmount if provided, otherwise calculate it based on total amount divided by installments
+    const installmentAmount = outgoing.paymentPlan.installmentAmount !== undefined ? 
+      outgoing.paymentPlan.installmentAmount : 
       (totalInstallments > 0 ? Math.ceil((outgoing.amount / totalInstallments) * 100) / 100 : outgoing.amount);
-    
+      
     // Reset currentDate to re-iterate
     currentDate = new Date(startDate);
     let installmentNumber = 1;
@@ -379,15 +391,21 @@ const OutgoingsPage: React.FC = () => {
   const groupedOutgoings: { [heading: string]: OutgoingWithDate[] } = {};
   
   sortedOccurrences.forEach(outgoing => {
-    const heading = getDateHeading(outgoing.specificDate);
+    const isExpired = isPastDue(outgoing.specificDate);
+    const heading = isExpired ? EXPIRED_GROUP_KEY : getDateHeading(outgoing.specificDate);
+    
     if (!groupedOutgoings[heading]) {
       groupedOutgoings[heading] = [];
     }
     groupedOutgoings[heading].push(outgoing);
   });
 
-  // Sort headings to ensure Today, Tomorrow come first, then dates
+  // Sort headings to ensure Today, Tomorrow come first, then dates, with Expired at the end
   const sortedHeadings = Object.keys(groupedOutgoings).sort((a, b) => {
+    // Expired section always comes last
+    if (a === EXPIRED_GROUP_KEY) return 1;
+    if (b === EXPIRED_GROUP_KEY) return -1;
+    
     // First by special heading order
     const aValue = getHeadingSortValue(a);
     const bValue = getHeadingSortValue(b);
@@ -417,6 +435,12 @@ const OutgoingsPage: React.FC = () => {
   const getNextPaymentDate = (outgoing: Outgoing): string => {
     const nextDate = getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence);
     return formatDate(nextDate.toISOString());
+  };
+
+  // Check if an outgoing is past due (for list view)
+  const isOutgoingPastDue = (outgoing: Outgoing): boolean => {
+    const nextDate = getNextOccurrence(new Date(outgoing.dueDate), outgoing.recurrence);
+    return isPastDue(nextDate);
   };
 
   // Get the total amount for each account
@@ -566,6 +590,82 @@ const OutgoingsPage: React.FC = () => {
           <div className="space-y-6 mb-8">
             {sortedHeadings.map(heading => {
               const outgoings = groupedOutgoings[heading];
+              
+              // Special handling for Expired group
+              if (heading === EXPIRED_GROUP_KEY) {
+                return (
+                  <div key={heading} className="mt-8">
+                    <h2 className="text-lg font-semibold text-gray-500 mb-3 border-l-4 border-gray-400 pl-3 flex items-center">
+                      <Clock className="mr-2" size={18} />
+                      Expired Outgoings
+                    </h2>
+                    <div className="grid gap-3">
+                      {outgoings.map((outgoing, index) => {
+                        const account = getAccountById(outgoing.accountId);
+                        const key = `${outgoing.id}-${index}`;
+                        
+                        return (
+                          <Card 
+                            key={key}
+                            className={`hover:border-indigo-100 transition-colors
+                              ${outgoing.isRepeatedInstance ? 'border-l-4 border-l-gray-200' : ''}
+                              ${outgoing.isPaymentPlanInstallment ? 'border-l-4 border-l-amber-300' : ''}`}
+                            onClick={() => handleEdit(outgoing)}
+                          >
+                            <div className="flex items-center">
+                              <div 
+                                className="w-12 h-12 rounded-full flex items-center justify-center mr-4"
+                                style={{ backgroundColor: account?.color + '20' }}
+                              >
+                                {outgoing.isPaymentPlanInstallment ? (
+                                  <PiggyBank size={24} style={{ color: account?.color }} />
+                                ) : (
+                                  <Calendar size={24} style={{ color: account?.color }} />
+                                )}
+                              </div>
+                              
+                              <div className="flex-grow">
+                                <div className="flex items-center gap-3">
+                                  <h3 className="text-lg font-semibold text-gray-900">{outgoing.name}</h3>
+                                  {getRecurrenceBadge(outgoing.recurrence, outgoing.isRepeatedInstance, outgoing.isPaymentPlanInstallment)}
+                                </div>
+                                <p className="text-sm text-gray-500">
+                                  {account?.name} • Due on {formatDate(outgoing.specificDate.toISOString())}
+                                  
+                                  {outgoing.isPaymentPlanInstallment && outgoing.originalOutgoingId && (
+                                    <span> • For {outgoing.name.split(' (Installment')[0]}</span>
+                                  )}
+                                </p>
+                              </div>
+                              
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <p className="text-lg font-semibold text-gray-900">
+                                    {formatCurrency(outgoing.amount, currency)}
+                                  </p>
+                                </div>
+                                <button 
+                                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                  onClick={(e) => handleDeleteClick(e, outgoing)}
+                                  aria-label={outgoing.isPaymentPlanInstallment ? "Edit payment plan" : "Delete outgoing"}
+                                >
+                                  {outgoing.isPaymentPlanInstallment ? (
+                                    <Settings size={18} />
+                                  ) : (
+                                    <Trash2 size={18} />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+              
+              // Regular date headings
               return (
                 <div key={heading}>
                   <h2 className="text-lg font-semibold text-gray-700 mb-3 border-l-4 border-indigo-500 pl-3">
@@ -661,8 +761,12 @@ const OutgoingsPage: React.FC = () => {
       {/* List View */}
       {viewMode === 'list' && (
         <div className="space-y-6 mb-8">
+          {/* Regular accounts */}
           {accounts.map(account => {
-            const accountOutgoings = outgoingsByAccount[account.id] || [];
+            // Filter to only show non-expired outgoings
+            const accountOutgoings = outgoingsByAccount[account.id]?.filter(
+              outgoing => !isOutgoingPastDue(outgoing)
+            ) || [];
             
             if (accountOutgoings.length === 0) return null;
             
@@ -701,7 +805,8 @@ const OutgoingsPage: React.FC = () => {
                             )}
                           </div>
                           <p className="text-xs text-gray-500">
-                            {getRecurrenceDescription(outgoing.recurrence)} • Next: {getNextPaymentDate(outgoing)}
+                            {getRecurrenceDescription(outgoing.recurrence)}
+                            <> • Next: {getNextPaymentDate(outgoing)}</>
                             {outgoing.paymentPlan?.enabled && (
                               <span> • Saving: {formatCurrency(outgoing.paymentPlan.installmentAmount || 0, currency)}/
                               {outgoing.paymentPlan.frequency}</span>
@@ -728,6 +833,71 @@ const OutgoingsPage: React.FC = () => {
               </div>
             );
           })}
+          
+          {/* Expired outgoings section */}
+          {(() => {
+            // Find all expired outgoings
+            const expiredOutgoings = outgoings.filter(outgoing => isOutgoingPastDue(outgoing));
+            
+            if (expiredOutgoings.length === 0) return null;
+            
+            return (
+              <div className="mt-8">
+                <h2 className="text-lg font-semibold text-gray-500 mb-3 border-l-4 border-gray-400 pl-3 flex items-center">
+                  <Clock className="mr-2" size={18} />
+                  Expired Outgoings
+                </h2>
+                
+                <div className="grid gap-2">
+                  {expiredOutgoings.map((outgoing) => {
+                    const account = getAccountById(outgoing.accountId);
+                    
+                    return (
+                      <Card 
+                        key={outgoing.id}
+                        className="hover:border-indigo-100 transition-colors py-3"
+                        onClick={() => handleEdit(outgoing)}
+                      >
+                        <div className="flex items-center">
+                          <div className="flex-grow pl-2">
+                            <div className="flex items-center gap-3">
+                              <h3 className="text-md font-medium text-gray-900">{outgoing.name}</h3>
+                              {getRecurrenceBadge(outgoing.recurrence)}
+                              {outgoing.paymentPlan?.enabled && (
+                                <Badge variant="warning" className="bg-amber-100 text-amber-800 border-amber-200">
+                                  Payment Plan
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {getRecurrenceDescription(outgoing.recurrence)} • {account?.name}
+                              {outgoing.paymentPlan?.enabled && (
+                                <span> • Saving: {formatCurrency(outgoing.paymentPlan.installmentAmount || 0, currency)}/
+                                {outgoing.paymentPlan.frequency}</span>
+                              )}
+                            </p>
+                          </div>
+                          
+                          <div className="text-right flex items-center">
+                            <p className="text-lg font-semibold text-gray-900 mr-4">
+                              {formatCurrency(outgoing.amount, currency)}
+                            </p>
+                            <button 
+                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                              onClick={(e) => handleDeleteClick(e, outgoing)}
+                              aria-label="Delete outgoing"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
           
           {outgoings.length === 0 && (
             <div className="text-center py-12 bg-gray-50 rounded-lg">

@@ -72,7 +72,7 @@ const AllocationPage: React.FC = () => {
 
   // Calculate the unallocated amount directly (funds that haven't been allocated)
   const unallocatedFunds = totalFunds - totalAllocated;
-
+  
   // Calculate total manually allocated amount
   const totalManuallyAllocated = useMemo(() => 
     Object.values(manualAllocations).reduce((sum, amount) => sum + amount, 0),
@@ -320,9 +320,9 @@ const AllocationPage: React.FC = () => {
     // Only log in development mode
     if (import.meta.env.DEV) {
       console.log('Allocation state:', { 
-        totalFunds, 
-        totalRequired, 
-        totalAllocated, 
+      totalFunds, 
+      totalRequired, 
+      totalAllocated, 
         remainingToAllocate,
         unallocatedFunds,
         totalManuallyAllocated,
@@ -618,7 +618,7 @@ const AllocationPage: React.FC = () => {
     <div className="max-w-5xl mx-auto pb-8">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Allocate Funds</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Allocate Funds</h1>
           <p className="text-gray-500 mt-1">Add your available funds and we'll allocate them to your accounts</p>
         </div>
       </div>
@@ -708,7 +708,7 @@ const AllocationPage: React.FC = () => {
               <p className="text-lg font-semibold">{formatCurrency(totalAllocated, currency)}</p>
             </div>
             <div className="flex items-center justify-between">
-              <div>
+            <div>
                 <p className="text-sm text-gray-500">
                   {totalManuallyAllocated > 0 ? 'Remaining after distribution:' : 'Remaining:'}
                 </p>
@@ -838,12 +838,12 @@ const AllocationPage: React.FC = () => {
                     </div>
                   ) : (
                     <div>
-                      <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-gray-900">
                         {formatCurrency(currentAllocation, currency)}
-                      </p>
-                      <p className="text-sm text-gray-500">
+                  </p>
+                  <p className="text-sm text-gray-500">
                         of {formatCurrency(totalOutgoings, currency)} needed
-                      </p>
+                  </p>
                     </div>
                   )}
                 </div>
@@ -915,11 +915,11 @@ const AllocationPage: React.FC = () => {
                     {/* Base funding up to 100% */}
                     <div 
                       className="h-full absolute top-0 left-0"
-                      style={{ 
+                  style={{ 
                         width: `${100 * (100/totalFundingPercentage)}%`,
-                        backgroundColor: account.color
-                      }}
-                    />
+                    backgroundColor: account.color
+                  }}
+                />
                     
                     {/* Overfunding area with lighter color */}
                     <div 
