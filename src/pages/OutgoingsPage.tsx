@@ -51,14 +51,28 @@ const getHeadingSortValue = (heading: string): number => {
 // Helper to format the badge for recurring payments
 const getRecurrenceBadge = (recurrence: RecurrenceType, isRepeatedInstance?: boolean): JSX.Element => {
   if (recurrence === 'none') {
-    return <Badge variant="info">One-time</Badge>;
+    return <Badge variant="info" className="bg-purple-100 text-purple-800 border-purple-200">One-time</Badge>;
   }
   
   if (isRepeatedInstance) {
     return <Badge variant="warning">Repeating</Badge>;
   }
   
-  return <Badge variant="primary">Recurring</Badge>;
+  // Show specific cadence for recurring outgoings with different colors
+  switch (recurrence) {
+    case 'weekly':
+      return <Badge variant="danger">Weekly</Badge>;
+    case 'biweekly':
+      return <Badge variant="warning">Bi-weekly</Badge>;
+    case 'monthly':
+      return <Badge variant="primary">Monthly</Badge>;
+    case 'quarterly':
+      return <Badge variant="success">Quarterly</Badge>;
+    case 'yearly':
+      return <Badge variant="info" className="bg-teal-100 text-teal-800 border-teal-200">Yearly</Badge>;
+    default:
+      return <Badge variant="primary">Recurring</Badge>;
+  }
 };
 
 // Component for pay cycle settings
@@ -137,6 +151,26 @@ const PayCycleSettingsForm: React.FC<PayCycleSettingsProps> = ({ onClose, initia
 };
 
 type ViewMode = 'timeline' | 'list';
+
+// Helper to get a human-readable recurrence description
+const getRecurrenceDescription = (recurrence: RecurrenceType): string => {
+  switch (recurrence) {
+    case 'none':
+      return 'One-time payment';
+    case 'weekly':
+      return 'Repeats every week';
+    case 'biweekly':
+      return 'Repeats every two weeks';
+    case 'monthly':
+      return 'Repeats monthly';
+    case 'quarterly':
+      return 'Repeats quarterly';
+    case 'yearly':
+      return 'Repeats yearly';
+    default:
+      return 'Recurring payment';
+  }
+};
 
 const OutgoingsPage: React.FC = () => {
   const { 
@@ -449,7 +483,7 @@ const OutgoingsPage: React.FC = () => {
                                 </p>
                                 <p className="text-sm text-gray-500">
                                   {outgoing.isRepeatedInstance ? 
-                                    'Recurring payment' : 
+                                    getRecurrenceDescription(outgoing.recurrence) : 
                                     `Next due ${formatDate(outgoing.specificDate.toISOString())}`}
                                 </p>
                               </div>
@@ -516,7 +550,7 @@ const OutgoingsPage: React.FC = () => {
                             {getRecurrenceBadge(outgoing.recurrence)}
                           </div>
                           <p className="text-xs text-gray-500">
-                            Next payment: {getNextPaymentDate(outgoing)}
+                            {getRecurrenceDescription(outgoing.recurrence)} • Next: {getNextPaymentDate(outgoing)}
                           </p>
                         </div>
                         
