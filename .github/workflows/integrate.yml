@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow
+
+name: "Integrate"
+
+on:
+    pull_request: null
+    push:
+        branches:
+        - "main"
+# Add [skip ci] to commit message to skip CI.
+
+permissions: {}
+
+concurrency:
+    group: "${{ github.workflow }}-${{ github.ref }}"
+    cancel-in-progress: true
+
+env:
+    NPM_CONFIG_FUND: "false"
+
+jobs:
+    js_syntax_errors:
+        name: "𝟏 JavaScript Syntax Errors"
+        runs-on: "ubuntu-22.04"
+        timeout-minutes: 5
+        steps:
+        -
+            name: "Checkout repository"
+            uses: "actions/checkout@v4.1.5"
+        -
+            name: "Set up Node.js"
+            uses: "actions/setup-node@v4.4.0"
+            with:
+                node-version: "22"
+                check-latest: true
+                cache: "npm"
+        -
+            name: "Install all dependencies"
+            run: "npm ci"
+        -
+            name: "Check JavaScript files for syntax errors"
+            run: |
+                git ls-files --cached -z -- 'src/**.tsx' \
+                    | xargs --null -- tsc --noEmit
+
+    js_coding_standards:
+        name: "𝟐 JavaScript Coding Standards"
+        needs:
+        - "js_syntax_errors"
+        permissions:
+            checks: "write"
+            contents: "read"
+            pull-requests: "read"
+        runs-on: "ubuntu-22.04"
+        timeout-minutes: 5
+        steps:
+        -
+            name: "Checkout repository"
+            uses: "actions/checkout@v4.1.5"
+        -
+            name: "Set up Node.js"
+            uses: "actions/setup-node@v4.4.0"
+            with:
+                node-version: "22"
+                cache: "npm"
+        -
+            name: "Install all dependencies"
+            run: "npm ci"
+        -
+            name: "Run ESLint"
+            run: "npm run lint -- --format json --output-file '${{ runner.temp }}/eslint-report.json'"
+            continue-on-error: true
+        -
+            name: "Annotate ESLint Results"
+            uses: "ataylorme/eslint-annotate-action@3.0.0"
+            with:
+                check-name: "𝕩 ESLint Annotations"
+                GITHUB_TOKEN: "${{ github.token }}"
+                report-json: "${{ runner.temp }}/eslint-report.json"
+
+    build:
+        name: "𝟓 Build"
+        needs:
+        - "js_coding_standards"
+        runs-on: "ubuntu-22.04"
+        timeout-minutes: 5
+        steps:
+        -
+            name: "Checkout repository"
+            uses: "actions/checkout@v4.1.5"
+        -
+            name: "Set up Node.js"
+            uses: "actions/setup-node@v4.4.0"
+            with:
+                node-version: "22"
+                cache: "npm"
+        -
+            name: "Install production dependencies"
+            run: "npm ci --omit=dev"
+        -
+            name: "Checks for security vulnerability advisories"
+            run: "npm audit --omit=dev"
+        -
+            name: "Build front-end"
+            run: "npm run build"
+        -
+            name: "Check differences to repository"
+            run: "git diff --exit-code"
