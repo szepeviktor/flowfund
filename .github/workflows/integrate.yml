@@ -41,7 +41,7 @@ jobs:
             name: "Check JavaScript files for syntax errors"
             run: |
                 git ls-files --cached -z -- 'src/**.tsx' \
-                    | xargs --null -- tsc --noEmit --jsx
+                    | xargs --null -- tsc --noEmit --jsx react
 
     js_coding_standards:
         name: "𝟐 JavaScript Coding Standards"
